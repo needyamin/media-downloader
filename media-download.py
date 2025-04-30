@@ -333,7 +333,7 @@ def debug_update_check():
         try:
             headers = {
                 'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': 'Yamin-Video-Downloader'
+                'User-Agent': 'Yamin-media-downloader'
             }
             response = requests.get(GITHUB_API_URL, headers=headers)
             log(f"API Response Status: {response.status_code}")
@@ -548,7 +548,7 @@ def check_for_updates():
         # Make the request with headers to avoid rate limiting
         headers = {
             'Accept': 'application/vnd.github.v3+json',
-            'User-Agent': 'Yamin-Video-Downloader'
+            'User-Agent': 'Yamin-media-downloader'
         }
         response = requests.get(GITHUB_API_URL, headers=headers)
         log(f"GitHub API Response Status: {response.status_code}")
@@ -708,7 +708,7 @@ help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About"
 help_menu.add_command(label="Check for Updates", command=check_updates_on_startup)
 help_menu.add_separator()
 help_menu.add_command(label="Report Issue", 
-    command=lambda: webbrowser.open("https://github.com/needyamin/Video-Downloader/issues"))
+    command=lambda: webbrowser.open("https://github.com/needyamin/media-downloader/issues"))
 
 # Add debug command to Help menu
 help_menu.add_separator()
