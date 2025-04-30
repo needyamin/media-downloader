@@ -3,7 +3,7 @@
 A desktop application developed for educational and personal use, designed to help users explore how media handling tools work. It supports downloading high-quality videos and audio from public sources.
 
 ## Application Preview
-![Image](https://github.com/user-attachments/assets/c3af982d-872c-44c2-a24d-f161f5dd0f90)
+![Image](https://github.com/user-attachments/assets/c4984fc3-5efb-43f4-9533-4092a2d1caaf)
 
 ## Features
 
