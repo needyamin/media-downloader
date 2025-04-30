@@ -66,7 +66,7 @@ playlist_output_dir.mkdir(parents=True, exist_ok=True)
 # Auto-update configuration
 REPO_OWNER = "needyamin"
 REPO_NAME = "video-audio-downloader"
-CURRENT_VERSION = "1.0.13"  # Updated to match latest release
+CURRENT_VERSION = "1.0.14"
 GITHUB_API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 UPDATE_CHECK_FILE = Path(os.environ["LOCALAPPDATA"]) / "Media Downloader" / "last_update_check.txt"
 
@@ -229,6 +229,10 @@ def hide_loading(label=None):
 def create_progress_hook():
     """Create a progress hook for yt-dlp."""
     def progress_hook(d):
+        if download_cancelled:
+            # Raise an exception to stop the download
+            raise yt_dlp.utils.DownloadError("Download cancelled by user")
+            
         if d['status'] == 'downloading':
             try:
                 # Calculate download progress
@@ -246,18 +250,21 @@ def create_progress_hook():
                     else:
                         message = f"Downloading: {percent:.1f}%"
                     
-                    update_progress(percent, message)
+                    # Update progress bar and label through the UI queue
+                    ui_queue.put(lambda: update_progress(percent, message))
                     log(message)
             except Exception as e:
                 log(f"Progress error: {str(e)}")
         
         elif d['status'] == 'finished':
-            update_progress(100, "Download complete! Processing...")
-            log("Download complete! Processing video...")
+            if not download_cancelled:
+                ui_queue.put(lambda: update_progress(100, "Download complete! Processing..."))
+                log("Download complete! Processing video...")
         
         elif d['status'] == 'error':
-            update_progress(0, "Error occurred during download")
-            log(f"Download error: {d.get('error', 'Unknown error')}")
+            if not download_cancelled:
+                ui_queue.put(lambda: update_progress(0, "Error occurred during download"))
+                log(f"Download error: {d.get('error', 'Unknown error')}")
     
     return progress_hook
 
@@ -403,24 +410,30 @@ def on_format_change(*args):
 
 def threaded_download(is_audio):
     """Start download in a separate thread."""
+    global current_download_thread
     def download_thread():
         try:
             disable_buttons()
             download_media(is_audio)
         finally:
             enable_buttons()
+            current_download_thread = None
     
     # Start the download in a new thread
-    thread = threading.Thread(target=download_thread, daemon=True)
-    thread.start()
+    current_download_thread = threading.Thread(target=download_thread, daemon=True)
+    current_download_thread.start()
 
 def enable_buttons():
     """Enable the download buttons."""
     try:
         if 'video_btn' in globals():
             video_btn.config(state='normal')
+            video_btn.grid()  # Ensure button is visible
         if 'audio_btn' in globals():
             audio_btn.config(state='normal')
+            audio_btn.grid()  # Ensure button is visible
+        if 'cancel_btn' in globals():
+            cancel_btn.grid_remove()  # Hide cancel button
     except:
         pass
 
@@ -429,8 +442,12 @@ def disable_buttons():
     try:
         if 'video_btn' in globals():
             video_btn.config(state='disabled')
+            video_btn.grid()  # Keep button visible but disabled
         if 'audio_btn' in globals():
             audio_btn.config(state='disabled')
+            audio_btn.grid()  # Keep button visible but disabled
+        if 'cancel_btn' in globals():
+            cancel_btn.grid()  # Show cancel button
     except:
         pass
 
@@ -937,6 +954,7 @@ buttons_frame = tk.Frame(main_frame, bg=THEME['bg'])
 buttons_frame.grid(row=2, column=0, sticky="ew", pady=(0, 20))
 buttons_frame.grid_columnconfigure(0, weight=1)
 buttons_frame.grid_columnconfigure(1, weight=1)
+buttons_frame.grid_columnconfigure(2, weight=1)
 
 video_btn = tk.Button(
     buttons_frame,
@@ -969,6 +987,24 @@ audio_btn = tk.Button(
     command=lambda: threaded_download(True)
 )
 audio_btn.grid(row=0, column=1, sticky="ew")
+
+# Add cancel button to buttons frame
+cancel_btn = tk.Button(
+    buttons_frame,
+    text="Cancel Download",
+    bg='#F44336',
+    fg='white',
+    activebackground='#424242',
+    activeforeground='white',
+    font=('Segoe UI', 10, 'bold'),
+    relief='flat',
+    cursor='hand2',
+    padx=20,
+    pady=8,
+    command=lambda: cancel_download()
+)
+cancel_btn.grid(row=0, column=2, padx=(10, 0), sticky="ew")
+cancel_btn.grid_remove()  # Initially hidden
 
 # Progress Section
 progress_frame = tk.Frame(main_frame, bg=THEME['bg'])
@@ -1063,22 +1099,28 @@ def create_tray_icon():
         log(f"Error creating tray icon: {e}")
 
 def show_window():
+    """Show the main window."""
     root.deiconify()
     root.lift()
     root.focus_force()
 
 def hide_window():
+    """Hide the window to system tray."""
     root.withdraw()
+    if tray_icon is None:
+        create_tray_icon()
 
 def on_minimize(event):
-    hide_window()
-    if tray_icon is None:
-        create_tray_icon()
+    """Handle window minimize event."""
+    if event.widget == root:  # Only minimize to tray if it's the main window
+        hide_window()
 
 def on_close():
-    hide_window()
-    if tray_icon is None:
-        create_tray_icon()
+    """Handle window close event."""
+    if messagebox.askyesno("Exit", "Do you want to minimize to system tray instead of closing?"):
+        hide_window()
+    else:
+        root.quit()
 
 # Bind minimize and close events
 root.protocol('WM_DELETE_WINDOW', on_close)
@@ -1089,11 +1131,14 @@ create_tray_icon()
 
 # Update progress function to show percentage in status
 def update_progress(percent, message=None):
-    progress['value'] = percent
-    if message:
-        progress_label.config(text=message)
-        status_label.config(text=message)
-        log(message)
+    """Update the progress bar and label."""
+    try:
+        progress['value'] = percent
+        if message:
+            progress_label.config(text=message)
+            status_label.config(text=message)
+    except Exception as e:
+        log(f"Error updating progress: {str(e)}")
 
 def finish_progress():
     progress['value'] = 100
@@ -1144,11 +1189,52 @@ def update_loading_animation():
         except:
             pass
 
+# Add global variable for download cancellation and yt-dlp instance
+download_cancelled = False
+ydl_instance = None
+current_download_thread = None
+
+def cancel_download():
+    """Cancel the current download."""
+    global download_cancelled, ydl_instance, current_download_thread
+    download_cancelled = True
+    
+    try:
+        # Cancel the yt-dlp instance by setting the download_cancelled flag
+        # The progress hook will check this flag and stop the download
+        if ydl_instance:
+            # Set the download_cancelled flag which is checked in the progress hook
+            ydl_instance = None
+        
+        # Force stop the download thread
+        if current_download_thread and current_download_thread.is_alive():
+            # Use a more aggressive approach to stop the thread
+            import ctypes
+            thread_id = ctypes.c_long(current_download_thread.ident)
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(thread_id, ctypes.py_object(SystemExit))
+            current_download_thread.join(timeout=1)
+        
+        # Reset progress and UI
+        ui_queue.put(lambda: update_progress(0, "Download cancelled"))
+        ui_queue.put(lambda: enable_buttons())
+        log("Download cancelled by user")
+        
+        # Ensure window stays visible after cancellation
+        root.deiconify()
+        root.lift()
+        root.focus_force()
+    except Exception as e:
+        log(f"Error during cancellation: {str(e)}")
+
 def download_media(is_audio):
     """Download media from the provided URL."""
-    global ffmpeg_path, ffprobe_path
+    global ffmpeg_path, ffprobe_path, download_cancelled, ydl_instance
+    download_cancelled = False  # Reset cancellation flag
+    ydl_instance = None  # Reset yt-dlp instance
+    
     try:
         show_loading()  # Show loading animation
+        update_progress(0, "Starting download...")  # Initialize progress bar
         
         # Get current quality settings
         current_video_quality = video_quality_var.get()
@@ -1164,30 +1250,18 @@ def download_media(is_audio):
         if not url:
             messagebox.showerror("Error", "Please enter a video URL")
             hide_loading()
+            update_progress(0, "Ready to download")
             return
 
-        # Log current quality settings
-        log(f"Current quality settings:")
-        log(f"- Video Quality: {current_video_quality}")
-        log(f"- Audio Quality: {current_audio_quality}kbps")
-        log(f"- Format: {current_format}")
+        # Check if URL is a playlist
+        is_playlist = 'playlist' in url.lower() or 'list=' in url.lower()
+        if is_playlist and not download_playlist.get():
+            if not messagebox.askyesno("Playlist Detected", 
+                "This appears to be a playlist URL. Would you like to download the entire playlist?\n\n"
+                "If not, only the first video will be downloaded."):
+                is_playlist = False
 
-        # Verify FFmpeg and FFprobe exist and are working
-        if not verify_ffmpeg(ffmpeg_path, ffprobe_path):
-            log("FFmpeg not found or not working, attempting to download...")
-            ffmpeg_path = download_ffmpeg()
-            ffprobe_path = str(Path(ffmpeg_path).parent / "ffprobe.exe")
-            
-            if not verify_ffmpeg(ffmpeg_path, ffprobe_path):
-                messagebox.showerror("Error", 
-                    "FFmpeg is required for audio extraction. Failed to download or verify FFmpeg.\n"
-                    "Please try again or download FFmpeg manually from: https://ffmpeg.org/download.html")
-                hide_loading()
-                return
-
-        is_playlist = download_playlist.get()
         max_files = max_files_entry.get() or '100'
-        
         try:
             max_files = int(max_files)
         except ValueError:
@@ -1216,16 +1290,18 @@ def download_media(is_audio):
             'progress_hooks': [create_progress_hook()],
             'restrictfilenames': True,
             'windowsfilenames': True,
-            'quiet': False,  # Set to False to see more output
+            'quiet': False,
             'no_warnings': False,
             'nocheckcertificate': False,
             'nooverwrites': True,
             'continuedl': True,
             'ffmpeg_location': ffmpeg_path,
             'merge_output_format': current_format,
-            'verbose': True,  # Add verbose output
-            'outtmpl': str(output_path / ('playlists/%(playlist_title)s/%(playlist_index)s_%(title)s.%(ext)s' 
+            'verbose': True,
+            'outtmpl': str(downloads_path / ('playlists/%(playlist_index)s_%(title)s.%(ext)s' 
                           if is_playlist else '%(title)s.%(ext)s')),
+            'playlist_items': f'1-{max_files}' if is_playlist else None,
+            'noplaylist': not is_playlist,
             'ssl_verify': True,
             'source_address': None,
             'socket_timeout': 30,
@@ -1233,11 +1309,7 @@ def download_media(is_audio):
             'extractor_retries': 10,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            },
-            'postprocessors': [{
-                'key': 'FFmpegVideoRemuxer',
-                'preferedformat': current_format
-            }]
+            }
         }
 
         # Configure postprocessor based on download type and quality settings
@@ -1258,38 +1330,63 @@ def download_media(is_audio):
                 'preferredcodec': 'mp3',
                 'preferredquality': current_audio_quality
             })
-        
-        # Add FFmpeg location and merge format
-        ydl_opts['ffmpeg_location'] = ffmpeg_path
-        ydl_opts['merge_output_format'] = current_format
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(url, download=False)
+        ydl_instance = yt_dlp.YoutubeDL(ydl_opts)
+        try:
+            info = ydl_instance.extract_info(url, download=False)
+            
+            if is_playlist and 'entries' in info:
+                log(f"? Downloading playlist: {info.get('title', 'Untitled')}")
+                log(f"?? Number of items: {len(info['entries'])}")
+                log(f"?? Downloading first {max_files} items")
+            
+            log(f"? Starting download: {url}")
+            log(f"? Using quality settings: Video={current_video_quality}, Audio={current_audio_quality}kbps, Format={current_format}")
+            
+            if download_cancelled:
+                return
                 
-                if is_playlist and 'entries' in info:
-                    log(f"? Downloading playlist: {info.get('title', 'Untitled')}")
-                    log(f"?? Number of items: {len(info['entries'])}")
-                    log(f"?? Downloading first {max_files} items")
+            ydl_instance.download([url])
+            
+            if download_cancelled:
+                log("Download cancelled")
+                return
+            
+            if is_playlist:
+                log(f"? Playlist download completed!")
+                playlist_folder = downloads_path / "playlists"
+                log(f"?? Saved to: {playlist_folder}")
                 
-                log(f"? Starting download: {url}")
-                log(f"? Using quality settings: Video={current_video_quality}, Audio={current_audio_quality}kbps, Format={current_format}")
-                ydl.download([url])
-                
-                if is_playlist:
-                    log(f"? Playlist download completed!")
-                    log(f"?? Saved to: {output_path}/playlists/")
-                    # Open the playlist folder
-                    playlist_folder = output_path / "playlists" / info.get('title', 'Untitled')
-                    if playlist_folder.exists():
-                        os.startfile(str(playlist_folder))
-                else:
-                    log("? Download completed!")
-                    log(f"?? Saved to: {output_path}")
-                    # Open the output folder
-                    os.startfile(str(output_path))
+                # Ensure the folder exists and open it
+                if playlist_folder.exists():
+                    try:
+                        # Convert to string and normalize path
+                        folder_path = str(playlist_folder.resolve())
+                        log(f"Opening folder: {folder_path}")
+                        os.startfile(folder_path)
+                    except Exception as e:
+                        log(f"Error opening folder: {str(e)}")
+                        # Try alternative method if the first one fails
+                        try:
+                            subprocess.Popen(['explorer', folder_path])
+                        except Exception as e:
+                            log(f"Alternative folder opening failed: {str(e)}")
+            else:
+                log("? Download completed!")
+                log(f"?? Saved to: {output_path}")
+                # Open the output folder
+                try:
+                    folder_path = str(output_path.resolve())
+                    os.startfile(folder_path)
+                except Exception as e:
+                    log(f"Error opening folder: {str(e)}")
+                    try:
+                        subprocess.Popen(['explorer', folder_path])
+                    except Exception as e:
+                        log(f"Alternative folder opening failed: {str(e)}")
 
-            except yt_dlp.utils.DownloadError as e:
+        except yt_dlp.utils.DownloadError as e:
+            if not download_cancelled:  # Only show error if not cancelled
                 if "ffmpeg" in str(e).lower():
                     messagebox.showerror("Error", 
                         "FFmpeg is required for audio extraction. Please install FFmpeg and try again.\n"
@@ -1303,16 +1400,25 @@ def download_media(is_audio):
                 else:
                     messagebox.showerror("Error", f"Download failed: {str(e)}")
                 log(f"Error: {str(e)}")
-            except Exception as e:
+        except Exception as e:
+            if not download_cancelled:  # Only show error if not cancelled
                 messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
                 log(f"Error: {str(e)}")
+        finally:
+            ydl_instance = None
 
     except Exception as e:
-        messagebox.showerror("Error", f"Error occurred:\n{e}")
+        if not download_cancelled:  # Only show error if not cancelled
+            messagebox.showerror("Error", f"Error occurred:\n{e}")
     finally:
         hide_loading()  # Hide loading animation
-        ui_queue.put(lambda: enable_buttons())
-        ui_queue.put(lambda: update_progress(0, "Ready to download"))
+        if not download_cancelled:
+            ui_queue.put(lambda: enable_buttons())
+            ui_queue.put(lambda: update_progress(0, "Ready to download"))
+        # Ensure window stays visible after download
+        root.deiconify()
+        root.lift()
+        root.focus_force()
 
 # Clipboard Monitoring Functions
 def is_supported_url(url):
