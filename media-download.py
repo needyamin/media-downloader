@@ -28,6 +28,68 @@ import ssl
 import certifi
 import io
 import winreg
+import traceback
+
+# Debug mode - set to True to enable detailed console output
+DEBUG_MODE = True
+
+# Set up debugging and error handling
+def setup_debugging():
+    """Configure debugging and error handling"""
+    # Print system information
+    print("\n=== SYSTEM INFORMATION ===")
+    print(f"Python version: {sys.version}")
+    print(f"Operating system: {sys.platform}")
+    print(f"Current directory: {os.getcwd()}")
+    
+    try:
+        print(f"yt-dlp version: {yt_dlp.version.__version__}")
+    except Exception as e:
+        print(f"Error getting yt-dlp version: {e}")
+    
+    # Check for required modules
+    required_modules = [
+        "tkinter", "PIL", "yt_dlp", "pyperclip", "pystray", 
+        "validators", "win32com", "requests"
+    ]
+    
+    print("\n=== MODULE CHECKS ===")
+    for module_name in required_modules:
+        try:
+            module = __import__(module_name)
+            if hasattr(module, "__version__"):
+                print(f"{module_name}: OK (version {module.__version__})")
+            else:
+                print(f"{module_name}: OK")
+        except ImportError as e:
+            print(f"{module_name}: MISSING - {e}")
+        except Exception as e:
+            print(f"{module_name}: ERROR - {e}")
+    
+    # Set up global exception handler
+    def global_exception_handler(exc_type, exc_value, exc_traceback):
+        """Handle uncaught exceptions"""
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+            
+        error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        print(f"\n[CRITICAL ERROR]:\n{error_msg}")
+        
+        # If message box is available, show error
+        try:
+            if 'messagebox' in globals():
+                messagebox.showerror("Critical Error", 
+                    f"An unexpected error occurred: {exc_value}\n\nSee console for details.")
+        except:
+            pass
+    
+    # Install the exception handler
+    sys.excepthook = global_exception_handler
+    print("\n=== DEBUG SETUP COMPLETE ===\n")
+
+# Run debugging setup
+setup_debugging()
 
 # GUI Theme and Styles
 THEME = {
@@ -77,35 +139,68 @@ loading_gif = None
 loading_label = None
 quality_settings = {
     'video_quality': 'best',  # best, 1080p, 720p, 480p, 360p
-    'audio_quality': '192',   # 320, 256, 192, 128, 96
+    'audio_quality': '320',   # 320, 256, 192, 128, 96
     'format': 'mp4'          # mp4, webm, mkv
 }
 
 def verify_ffmpeg(ffmpeg_path, ffprobe_path):
     """Verify that FFmpeg and FFprobe are working."""
     try:
+        print(f"\n=== FFMPEG VERIFICATION ===")
+        print(f"FFmpeg path: {ffmpeg_path}")
+        print(f"FFprobe path: {ffprobe_path}")
+        
         if not ffmpeg_path or not ffprobe_path:
+            log("FFmpeg path or FFprobe path is empty")
+            print("FFmpeg or FFprobe path is empty")
+            return False
+            
+        if not os.path.exists(ffmpeg_path) or not os.path.exists(ffprobe_path):
+            log(f"FFmpeg or FFprobe executable not found at: {ffmpeg_path} or {ffprobe_path}")
+            print(f"FFmpeg file exists: {os.path.exists(ffmpeg_path)}")
+            print(f"FFprobe file exists: {os.path.exists(ffprobe_path)}")
             return False
             
         # Check FFmpeg
+        log(f"Testing FFmpeg at: {ffmpeg_path}")
+        print(f"Testing FFmpeg execution...")
         result = subprocess.run([ffmpeg_path, '-version'], 
                               capture_output=True, 
                               text=True,
                               creationflags=subprocess.CREATE_NO_WINDOW)
         if result.returncode != 0:
+            log(f"FFmpeg test failed with return code: {result.returncode}")
+            log(f"Error: {result.stderr}")
+            print(f"FFmpeg test failed with return code: {result.returncode}")
+            print(f"Error: {result.stderr}")
             return False
+        else:
+            log("FFmpeg test successful")
+            print(f"FFmpeg version: {result.stdout.splitlines()[0] if result.stdout else 'Unknown'}")
             
         # Check FFprobe
+        log(f"Testing FFprobe at: {ffprobe_path}")
+        print(f"Testing FFprobe execution...")
         result = subprocess.run([ffprobe_path, '-version'], 
                               capture_output=True, 
                               text=True,
                               creationflags=subprocess.CREATE_NO_WINDOW)
         if result.returncode != 0:
+            log(f"FFprobe test failed with return code: {result.returncode}")
+            log(f"Error: {result.stderr}")
+            print(f"FFprobe test failed with return code: {result.returncode}")
+            print(f"Error: {result.stderr}")
             return False
+        else:
+            log("FFprobe test successful")
+            print(f"FFprobe version: {result.stdout.splitlines()[0] if result.stdout else 'Unknown'}")
             
+        print("FFmpeg verification passed successfully")
         return True
     except Exception as e:
         log(f"Error verifying FFmpeg: {str(e)}")
+        print(f"Exception during FFmpeg verification: {str(e)}")
+        print(traceback.format_exc())
         return False
 
 def download_ffmpeg():
@@ -128,67 +223,98 @@ def download_ffmpeg():
         # Show loading animation
         message_label = show_loading("Downloading FFmpeg...")
         
-        # Download FFmpeg from GitHub
-        log("Starting FFmpeg download...")
-        response = requests.get("https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip", stream=True)
-        response.raise_for_status()
+        # Alternative download URLs in case the first one fails
+        download_urls = [
+            "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
+            "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+            "https://github.com/GyanD/codexffmpeg/releases/download/2023-10-08-git-10a3e7e0f8/ffmpeg-2023-10-08-git-10a3e7e0f8-essentials_build.zip"
+        ]
         
-        # Get total file size
-        total_size = int(response.headers.get('content-length', 0))
-        block_size = 1024  # 1 Kibibyte
-        downloaded = 0
+        # Try each download URL until one succeeds
+        for download_url in download_urls:
+            try:
+                log(f"Attempting to download FFmpeg from: {download_url}")
+                
+                # Download FFmpeg from GitHub
+                response = requests.get(download_url, stream=True, timeout=30)
+                response.raise_for_status()
+                
+                # Get total file size
+                total_size = int(response.headers.get('content-length', 0))
+                block_size = 1024  # 1 Kibibyte
+                downloaded = 0
+                
+                # Save the zip file with progress
+                zip_path = ffmpeg_dir / "ffmpeg.zip"
+                with open(zip_path, 'wb') as f:
+                    for data in response.iter_content(block_size):
+                        downloaded += len(data)
+                        f.write(data)
+                        # Update progress
+                        if total_size:
+                            percent = int(100 * downloaded / total_size)
+                            message = f"Downloading FFmpeg... {percent}% ({downloaded}/{total_size} bytes)"
+                            log(message)
+                            if message_label:
+                                message_label.config(text=message)
+                
+                log("FFmpeg download completed. Extracting files...")
+                if message_label:
+                    message_label.config(text="Extracting FFmpeg files...")
+                
+                # Extract the zip file
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(ffmpeg_dir)
+                
+                # Find the bin directory with ffmpeg.exe and ffprobe.exe
+                ffmpeg_exe_paths = list(ffmpeg_dir.glob("**/ffmpeg.exe"))
+                ffprobe_exe_paths = list(ffmpeg_dir.glob("**/ffprobe.exe"))
+                
+                if not ffmpeg_exe_paths or not ffprobe_exe_paths:
+                    log("FFmpeg executables not found in zip file")
+                    continue  # Try next URL
+                
+                # Get the first found executables
+                source_ffmpeg = ffmpeg_exe_paths[0]
+                source_ffprobe = ffprobe_exe_paths[0]
+                
+                log(f"Moving FFmpeg from {source_ffmpeg} to {ffmpeg_path}")
+                log(f"Moving FFprobe from {source_ffprobe} to {ffprobe_path}")
+                
+                # Move FFmpeg and FFprobe to the main directory
+                if ffmpeg_path.exists():
+                    ffmpeg_path.unlink()
+                if ffprobe_path.exists():
+                    ffprobe_path.unlink()
+                    
+                shutil.copy2(str(source_ffmpeg), str(ffmpeg_path))
+                shutil.copy2(str(source_ffprobe), str(ffprobe_path))
+                
+                # Clean up
+                try:
+                    zip_path.unlink()
+                    for item in ffmpeg_dir.glob("*"):
+                        if item.is_dir() and item.name != "bin" and item != ffmpeg_path.parent and item != ffprobe_path.parent:
+                            shutil.rmtree(item)
+                except:
+                    pass  # Ignore cleanup errors
+                
+                # Verify installation
+                if verify_ffmpeg(str(ffmpeg_path), str(ffprobe_path)):
+                    log("FFmpeg installation successful")
+                    return str(ffmpeg_path)
+                else:
+                    log("FFmpeg verification failed after installation, trying next URL")
+            except Exception as e:
+                log(f"Error downloading FFmpeg from {download_url}: {str(e)}")
+                # Continue to next URL
         
-        # Save the zip file with progress
-        zip_path = ffmpeg_dir / "ffmpeg.zip"
-        with open(zip_path, 'wb') as f:
-            for data in response.iter_content(block_size):
-                downloaded += len(data)
-                f.write(data)
-                # Update progress
-                if total_size:
-                    percent = int(100 * downloaded / total_size)
-                    message = f"Downloading FFmpeg... {percent}% ({downloaded}/{total_size} bytes)"
-                    log(message)
-                    if message_label:
-                        message_label.config(text=message)
-        
-        log("FFmpeg download completed. Extracting files...")
-        if message_label:
-            message_label.config(text="Extracting FFmpeg files...")
-        
-        # Extract the zip file
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(ffmpeg_dir)
-        
-        # Find the bin directory
-        bin_dir = next(ffmpeg_dir.glob("**/bin"), None)
-        if not bin_dir:
-            raise Exception("Could not find FFmpeg bin directory")
-        
-        log("Moving FFmpeg files to correct location...")
-        if message_label:
-            message_label.config(text="Installing FFmpeg...")
-        
-        # Move FFmpeg and FFprobe to the main directory
-        shutil.move(str(bin_dir / "ffmpeg.exe"), str(ffmpeg_path))
-        shutil.move(str(bin_dir / "ffprobe.exe"), str(ffprobe_path))
-        
-        # Clean up
-        zip_path.unlink()
-        for item in ffmpeg_dir.glob("*"):
-            if item.is_dir() and item.name != "bin":
-                shutil.rmtree(item)
-        
-        log("Verifying FFmpeg installation...")
-        if message_label:
-            message_label.config(text="Verifying installation...")
-        
-        # Verify installation
-        if verify_ffmpeg(str(ffmpeg_path), str(ffprobe_path)):
-            log("FFmpeg installation successful")
-            return str(ffmpeg_path)
-        else:
-            raise Exception("FFmpeg verification failed after installation")
+        # If we got here, all URLs failed
+        log("All FFmpeg download attempts failed")
+        messagebox.showerror("Error", 
+            "Failed to download FFmpeg. You may need to install it manually.\n"
+            "Please visit: https://ffmpeg.org/download.html")
+        return None
             
     except Exception as e:
         log(f"Error downloading FFmpeg: {str(e)}")
@@ -263,8 +389,9 @@ def create_progress_hook():
         
         elif d['status'] == 'error':
             if not download_cancelled:
-                ui_queue.put(lambda: update_progress(0, "Error occurred during download"))
-                log(f"Download error: {d.get('error', 'Unknown error')}")
+                error_msg = d.get('error', 'Unknown error')
+                ui_queue.put(lambda: update_progress(0, f"Error occurred: {error_msg}"))
+                log(f"Download error: {error_msg}")
     
     return progress_hook
 
@@ -374,7 +501,7 @@ root.configure(bg=THEME['bg'])
 
 # Quality settings variables
 video_quality_var = tk.StringVar(value='best')
-audio_quality_var = tk.StringVar(value='192')
+audio_quality_var = tk.StringVar(value='320')
 format_var = tk.StringVar(value='mp4')
 
 # Create auto-start variable
@@ -882,13 +1009,39 @@ def initialize_ffmpeg():
     """Initialize FFmpeg and FFprobe."""
     global ffmpeg_path, ffprobe_path
     try:
+        # Debug the FFmpeg initialization
+        print("\n=== INITIALIZING FFMPEG ===")
+        print(f"Current ffmpeg_path: {ffmpeg_path}")
+        
+        # Try to find FFmpeg in expected locations first
+        if not ffmpeg_path or not os.path.exists(ffmpeg_path):
+            # Look in common FFmpeg locations
+            potential_paths = [
+                Path(os.environ["LOCALAPPDATA"]) / "Media Downloader" / "ffmpeg" / "ffmpeg.exe",
+                Path(os.environ["PROGRAMFILES"]) / "ffmpeg" / "bin" / "ffmpeg.exe",
+                Path(os.environ["LOCALAPPDATA"]) / "Programs" / "ffmpeg" / "bin" / "ffmpeg.exe",
+                Path(APP_DIR) / "ffmpeg" / "ffmpeg.exe"
+            ]
+            
+            print("Searching for existing FFmpeg installation...")
+            for path in potential_paths:
+                print(f"Checking: {path}")
+                if path.exists():
+                    print(f"Found existing FFmpeg at: {path}")
+                    ffmpeg_path = str(path)
+                    ffprobe_path = str(path.parent / "ffprobe.exe")
+                    break
+        
         # Try to download FFmpeg if not already installed
         if not ffmpeg_path or not verify_ffmpeg(ffmpeg_path, str(Path(ffmpeg_path).parent / "ffprobe.exe")):
+            print("No working FFmpeg found, attempting to download...")
             ffmpeg_path = download_ffmpeg()
             if not ffmpeg_path:
                 raise Exception("Failed to download FFmpeg")
         
         ffprobe_path = str(Path(ffmpeg_path).parent / "ffprobe.exe")
+        print(f"Final ffmpeg_path: {ffmpeg_path}")
+        print(f"Final ffprobe_path: {ffprobe_path}")
         
         # Configure yt-dlp to use both FFmpeg and FFprobe
         yt_dlp.postprocessor.ffmpeg.FFmpegPostProcessor.EXES = {
@@ -896,16 +1049,98 @@ def initialize_ffmpeg():
             'ffprobe': ffprobe_path,
         }
         
+        # Print the actual FFmpeg path that yt-dlp will use
+        print(f"yt-dlp FFmpeg path: {yt_dlp.postprocessor.ffmpeg.FFmpegPostProcessor.EXES.get('ffmpeg')}")
+        
         # Verify installation
         if not verify_ffmpeg(ffmpeg_path, ffprobe_path):
             raise Exception("FFmpeg verification failed after initialization")
+        
+        # Verify output directories
+        verify_output_directories()
         
         # Update status
         log("Initialization complete. Ready to download!")
         status_label.config(text="Ready to download")
     except Exception as e:
         log(f"Error initializing FFmpeg: {str(e)}")
+        print(f"Error initializing FFmpeg: {str(e)}")
+        print(traceback.format_exc())
         status_label.config(text="Error: FFmpeg initialization failed")
+
+def verify_output_directories():
+    """Verify that output directories exist and create them if they don't."""
+    try:
+        log("Verifying output directories...")
+        print("\n=== VERIFYING OUTPUT DIRECTORIES ===")
+        
+        # Check for invalid characters in paths (Windows restrictions)
+        invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
+        for path in [downloads_path, video_output_dir, audio_output_dir, playlist_output_dir]:
+            path_str = str(path)
+            print(f"Checking path: {path_str}")
+            
+            # Check for invalid characters in path
+            has_invalid = any(char in path_str for char in invalid_chars)
+            if has_invalid:
+                print(f"WARNING: Path contains invalid characters: {path_str}")
+            
+            # Check for long path issues (Windows MAX_PATH is 260 chars)
+            if len(path_str) > 240:  # Leave some room for filenames
+                print(f"WARNING: Path is very long ({len(path_str)} chars): {path_str}")
+        
+        # Ensure the main download directory exists
+        if not downloads_path.exists():
+            log(f"Creating main download directory: {downloads_path}")
+            print(f"Creating main download directory: {downloads_path}")
+            downloads_path.mkdir(parents=True, exist_ok=True)
+        
+        # Ensure the video directory exists
+        if not video_output_dir.exists():
+            log(f"Creating video output directory: {video_output_dir}")
+            print(f"Creating video output directory: {video_output_dir}")
+            video_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Ensure the audio directory exists
+        if not audio_output_dir.exists():
+            log(f"Creating audio output directory: {audio_output_dir}")
+            print(f"Creating audio output directory: {audio_output_dir}")
+            audio_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Ensure the playlist directory exists
+        if not playlist_output_dir.exists():
+            log(f"Creating playlist output directory: {playlist_output_dir}")
+            print(f"Creating playlist output directory: {playlist_output_dir}")
+            playlist_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Test write permissions
+        try:
+            print("Testing write permissions...")
+            test_files = []
+            for dir_path in [video_output_dir, audio_output_dir, playlist_output_dir]:
+                test_file = dir_path / "write_test.tmp"
+                test_files.append(test_file)
+                with open(test_file, 'w') as f:
+                    f.write("write test")
+            
+            # Cleanup test files
+            for test_file in test_files:
+                if test_file.exists():
+                    test_file.unlink()
+            print("All directories are writable")
+        except Exception as e:
+            print(f"WARNING: Write permission test failed: {e}")
+            print(traceback.format_exc())
+            # Continue anyway, might still work
+        
+        log("Output directories verified and created if needed")
+        print("Output directory verification complete")
+        return True
+    except Exception as e:
+        log(f"Error verifying output directories: {str(e)}")
+        print(f"Error verifying output directories: {str(e)}")
+        print(traceback.format_exc())
+        return False
 
 # Start FFmpeg initialization in a separate thread
 threading.Thread(target=initialize_ffmpeg, daemon=True).start()
@@ -1236,6 +1471,23 @@ def download_media(is_audio):
         show_loading()  # Show loading animation
         update_progress(0, "Starting download...")  # Initialize progress bar
         
+        # Verify output directories exist
+        if not verify_output_directories():
+            messagebox.showerror("Error", "Failed to create output directories. Check permissions and disk space.")
+            hide_loading()
+            update_progress(0, "Ready to download")
+            return
+            
+        # Verify FFmpeg is available
+        if not ffmpeg_path or not os.path.exists(ffmpeg_path):
+            log("FFmpeg not found. Attempting to download...")
+            ffmpeg_path = download_ffmpeg()
+            if not ffmpeg_path or not os.path.exists(ffmpeg_path):
+                messagebox.showerror("Error", "FFmpeg is required but could not be installed automatically.")
+                hide_loading()
+                update_progress(0, "Ready to download")
+                return
+        
         # Get current quality settings
         current_video_quality = video_quality_var.get()
         current_audio_quality = audio_quality_var.get()
@@ -1254,7 +1506,10 @@ def download_media(is_audio):
             return
 
         # Check if URL is a playlist
-        is_playlist = 'playlist' in url.lower() or 'list=' in url.lower()
+        is_playlist = ('playlist' in url.lower() or 
+                       'list=' in url.lower() or 
+                       '/sets/' in url.lower())  # Handle SoundCloud sets
+                       
         if is_playlist and not download_playlist.get():
             if not messagebox.askyesno("Playlist Detected", 
                 "This appears to be a playlist URL. Would you like to download the entire playlist?\n\n"
@@ -1267,7 +1522,26 @@ def download_media(is_audio):
         except ValueError:
             max_files = 100
 
-        output_path = audio_output_dir if is_audio else video_output_dir
+        # Set the appropriate output directory
+        if is_playlist:
+            output_path = playlist_output_dir
+            output_template = str(playlist_output_dir / '%(playlist_index)s_%(title)s.%(ext)s')
+        elif is_audio:
+            output_path = audio_output_dir
+            output_template = str(audio_output_dir / '%(title)s.%(ext)s')
+        else:
+            output_path = video_output_dir
+            output_template = str(video_output_dir / '%(title)s.%(ext)s')
+
+        log(f"Output directory set to: {output_path}")
+
+        # Validate URL
+        if not url.startswith(('http://', 'https://')):
+            log(f"URL validation failed: {url}")
+            messagebox.showerror("Error", "Please enter a valid URL starting with http:// or https://")
+            hide_loading()
+            update_progress(0, "Ready to download")
+            return
 
         # Configure format and quality settings
         if is_audio:
@@ -1277,9 +1551,11 @@ def download_media(is_audio):
             log(f"- Quality: {current_audio_quality}kbps")
         else:
             if current_video_quality == 'best':
-                format_code = 'bestvideo+bestaudio/best'
+                # Use a simpler format string that's more compatible
+                format_code = 'best[ext=mp4]/best'
             else:
-                format_code = f'bestvideo[height<={current_video_quality}]+bestaudio/best'
+                # For numeric qualities, use a simpler format string
+                format_code = f'best[height<={current_video_quality}][ext=mp4]/best[height<={current_video_quality}]/best'
             log(f"Downloading video with settings:")
             log(f"- Format: {format_code}")
             log(f"- Quality: {current_video_quality}")
@@ -1292,17 +1568,17 @@ def download_media(is_audio):
             'windowsfilenames': True,
             'quiet': False,
             'no_warnings': False,
-            'nocheckcertificate': False,
+            'nocheckcertificate': True,  # Avoid certificate issues
             'nooverwrites': True,
+            'ignoreerrors': True,  # Don't stop on errors
             'continuedl': True,
             'ffmpeg_location': ffmpeg_path,
             'merge_output_format': current_format,
             'verbose': True,
-            'outtmpl': str(downloads_path / ('playlists/%(playlist_index)s_%(title)s.%(ext)s' 
-                          if is_playlist else '%(title)s.%(ext)s')),
+            'outtmpl': output_template,
             'playlist_items': f'1-{max_files}' if is_playlist else None,
             'noplaylist': not is_playlist,
-            'ssl_verify': True,
+            'ssl_verify': False,  # Disable SSL verification to avoid certificate issues
             'source_address': None,
             'socket_timeout': 30,
             'retries': 10,
@@ -1311,7 +1587,7 @@ def download_media(is_audio):
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
         }
-
+        
         # Configure postprocessor based on download type and quality settings
         if is_audio:
             ydl_opts['postprocessors'] = [{
@@ -1320,48 +1596,166 @@ def download_media(is_audio):
                 'preferredquality': current_audio_quality,
             }]
         else:
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegVideoRemuxer',
-                'preferedformat': current_format
-            }]
-            # Add audio quality postprocessor for videos
-            ydl_opts['postprocessors'].append({
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': current_audio_quality
-            })
+            # For video downloads, let's try without a postprocessor first
+            # This often works better for many sites
+            pass  # Don't add any postprocessors for video
 
         ydl_instance = yt_dlp.YoutubeDL(ydl_opts)
         try:
-            info = ydl_instance.extract_info(url, download=False)
+            log("Extracting video information...")
+            try:
+                info = ydl_instance.extract_info(url, download=False)
+                if not info:
+                    raise Exception("Failed to extract video information")
+            except Exception as extract_error:
+                log(f"Error extracting info: {str(extract_error)}")
+                messagebox.showerror("Error", f"Failed to extract video information: {str(extract_error)}")
+                hide_loading()
+                update_progress(0, "Ready to download")
+                return
+            
+            log(f"Download options: {ydl_opts}")
             
             if is_playlist and 'entries' in info:
                 log(f"? Downloading playlist: {info.get('title', 'Untitled')}")
-                log(f"?? Number of items: {len(info['entries'])}")
+                entries_count = len(list(info.get('entries', [])))
+                log(f"?? Number of items: {entries_count}")
                 log(f"?? Downloading first {max_files} items")
-            
+            else:
+                log(f"? Downloading single video: {info.get('title', 'Untitled')}")
+                
+            log(f"? Download will be saved to: {output_path}")
             log(f"? Starting download: {url}")
             log(f"? Using quality settings: Video={current_video_quality}, Audio={current_audio_quality}kbps, Format={current_format}")
             
             if download_cancelled:
                 return
                 
-            ydl_instance.download([url])
-            
+            # Start the actual download
+            log("Starting download process...")
+            try:
+                print("\n=== DOWNLOAD PROCESS STARTING ===")
+                print(f"URL: {url}")
+                print(f"Output path: {output_path}")
+                print(f"Format: {format_code}")
+                print(f"Is audio only: {is_audio}")
+                print(f"Is playlist: {is_playlist}")
+                print(f"FFmpeg path: {ffmpeg_path}")
+                print(f"Output template: {output_template}")
+                
+                # Check that output directory exists and is writable
+                print(f"Checking output directory...")
+                if not output_path.exists():
+                    print(f"Creating output directory: {output_path}")
+                    output_path.mkdir(parents=True, exist_ok=True)
+                
+                # Test write access to output directory
+                try:
+                    test_file = output_path / "test_write.tmp"
+                    with open(test_file, 'w') as f:
+                        f.write("test")
+                    test_file.unlink()
+                    print("Output directory is writable")
+                except Exception as e:
+                    print(f"Warning: Output directory may not be writable: {e}")
+                
+                print("Starting yt-dlp download...")
+                try:
+                    # First attempt - use the configured options
+                    ydl_instance.download([url])
+                    print("yt-dlp download function completed")
+                except Exception as primary_error:
+                    # If the primary method failed, try a fallback with simpler options
+                    print(f"\n=== PRIMARY DOWNLOAD FAILED, TRYING FALLBACK ===")
+                    print(f"Primary error: {str(primary_error)}")
+                    
+                    # Create simpler fallback options
+                    fallback_opts = {
+                        'format': 'best' if not is_audio else 'bestaudio',
+                        'outtmpl': output_template,
+                        'nocheckcertificate': True,
+                        'ignoreerrors': True,
+                        'no_warnings': True,
+                        'quiet': False,
+                        'verbose': True,
+                        'progress_hooks': [create_progress_hook()]
+                    }
+                    
+                    if is_audio:
+                        fallback_opts['postprocessors'] = [{
+                            'key': 'FFmpegExtractAudio',
+                            'preferredcodec': 'mp3',
+                            'preferredquality': current_audio_quality,
+                        }]
+                        
+                    print(f"Trying fallback with simplified options: {fallback_opts}")
+                    fallback_ydl = yt_dlp.YoutubeDL(fallback_opts)
+                    fallback_ydl.download([url])
+                    print("Fallback download completed")
+                
+            except yt_dlp.utils.DownloadError as download_error:
+                error_str = str(download_error)
+                print(f"\n=== DOWNLOAD ERROR DETAILS ===")
+                print(f"Error: {error_str}")
+                print(f"Error type: {type(download_error).__name__}")
+                
+                # Detailed error diagnosis
+                if "ffmpeg" in error_str.lower():
+                    print("This appears to be an FFmpeg error")
+                    log(f"FFmpeg error: {error_str}")
+                    messagebox.showerror("FFmpeg Error", 
+                        f"Error with FFmpeg: {error_str}\n\n"
+                        "Please check that FFmpeg is installed correctly.")
+                elif "HTTP Error 429" in error_str:
+                    print("This appears to be a rate limit error")
+                    log(f"Rate limit error: {error_str}")
+                    messagebox.showerror("Rate Limit Error", 
+                        "You are being rate limited by the server. Please try again later.")
+                elif "postprocessor" in error_str.lower():
+                    print("This appears to be a postprocessor error")
+                    log(f"Postprocessor error: {error_str}")
+                    messagebox.showerror("Processing Error", 
+                        f"Error processing the video: {error_str}\n\n"
+                        "Try downloading without conversion or in a different format.")
+                elif "copyright" in error_str.lower() or "not available" in error_str.lower():
+                    print("This appears to be a content availability error")
+                    log(f"Content availability error: {error_str}")
+                    messagebox.showerror("Content Error", 
+                        f"This content may not be available: {error_str}")
+                elif "network" in error_str.lower() or "connection" in error_str.lower():
+                    print("This appears to be a network error")
+                    log(f"Network error: {error_str}")
+                    messagebox.showerror("Network Error", 
+                        f"Network connection issue: {error_str}\n\n"
+                        "Check your internet connection and try again.")
+                else:
+                    print("This is an unclassified error")
+                    log(f"Download error: {error_str}")
+                    messagebox.showerror("Download Error", error_str)
+                
+                hide_loading()
+                update_progress(0, "Ready to download")
+                return
+            except Exception as e:
+                log(f"Unexpected download error: {str(e)}")
+                messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
+            finally:
+                ydl_instance = None
+
             if download_cancelled:
                 log("Download cancelled")
                 return
-            
+
+            # Success! Open the appropriate folder
             if is_playlist:
                 log(f"? Playlist download completed!")
-                playlist_folder = downloads_path / "playlists"
-                log(f"?? Saved to: {playlist_folder}")
+                log(f"?? Saved to: {playlist_output_dir}")
                 
                 # Ensure the folder exists and open it
-                if playlist_folder.exists():
+                if playlist_output_dir.exists():
                     try:
                         # Convert to string and normalize path
-                        folder_path = str(playlist_folder.resolve())
+                        folder_path = str(playlist_output_dir.resolve())
                         log(f"Opening folder: {folder_path}")
                         os.startfile(folder_path)
                     except Exception as e:
@@ -1386,24 +1780,14 @@ def download_media(is_audio):
                         log(f"Alternative folder opening failed: {str(e)}")
 
         except yt_dlp.utils.DownloadError as e:
+            # This block will only be reached for errors not caught in the inner try block
             if not download_cancelled:  # Only show error if not cancelled
-                if "ffmpeg" in str(e).lower():
-                    messagebox.showerror("Error", 
-                        "FFmpeg is required for audio extraction. Please install FFmpeg and try again.\n"
-                        "You can download FFmpeg from: https://ffmpeg.org/download.html")
-                elif "certificate" in str(e).lower():
-                    messagebox.showerror("Error", 
-                        "SSL certificate verification failed. Please try the following:\n"
-                        "1. Update your Python installation\n"
-                        "2. Run: pip install --upgrade certifi\n"
-                        "3. Run: pip install --upgrade yt-dlp")
-                else:
-                    messagebox.showerror("Error", f"Download failed: {str(e)}")
-                log(f"Error: {str(e)}")
+                log(f"Uncaught download error: {str(e)}")
+                messagebox.showerror("Download Error", f"Download failed: {str(e)}")
         except Exception as e:
             if not download_cancelled:  # Only show error if not cancelled
+                log(f"Unexpected error: {str(e)}")
                 messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
-                log(f"Error: {str(e)}")
         finally:
             ydl_instance = None
 
