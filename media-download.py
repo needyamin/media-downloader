@@ -127,10 +127,13 @@ playlist_output_dir.mkdir(parents=True, exist_ok=True)
 
 # Auto-update configuration
 REPO_OWNER = "needyamin"
-REPO_NAME = "video-audio-downloader"
+REPO_NAME = "media-downloader"
 CURRENT_VERSION = "1.0.14"
 GITHUB_API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 UPDATE_CHECK_FILE = Path(os.environ["LOCALAPPDATA"]) / "Media Downloader" / "last_update_check.txt"
+
+# Add a force check flag to check for updates regardless of the time since last check
+FORCE_UPDATE_CHECK = False
 
 # Global variables
 ffmpeg_path = None
@@ -580,8 +583,15 @@ def disable_buttons():
 
 def should_check_for_updates():
     """Determine if we should check for updates (once per day)."""
+    global FORCE_UPDATE_CHECK
     try:
         log("Checking if update check is needed...")
+        
+        # If force check is enabled, always check
+        if FORCE_UPDATE_CHECK:
+            log("Force update check enabled, will check for updates")
+            return True
+            
         if not UPDATE_CHECK_FILE.exists():
             log("Update check file not found, will check for updates")
             return True
@@ -612,109 +622,221 @@ def update_check_timestamp():
 
 def compare_versions(v1, v2):
     """Compare two version strings and return True if v1 > v2."""
-    def parse_version(v):
-        # Remove any non-numeric and non-dot characters
-        v = ''.join(c for c in v if c.isdigit() or c == '.')
-        # Split into parts and convert to integers
-        parts = []
-        for part in v.split('.'):
-            try:
-                parts.append(int(part))
-            except ValueError:
-                parts.append(0)
-        return parts
-    
-    v1_parts = parse_version(v1)
-    v2_parts = parse_version(v2)
-    
-    # Pad with zeros to make lengths equal
-    max_len = max(len(v1_parts), len(v2_parts))
-    v1_parts.extend([0] * (max_len - len(v1_parts)))
-    v2_parts.extend([0] * (max_len - len(v2_parts)))
-    
-    log(f"Comparing versions: {v1_parts} > {v2_parts}")
-    return v1_parts > v2_parts
+    try:
+        print(f"Comparing versions: '{v1}' > '{v2}'")
+        # Ensure we have strings
+        v1 = str(v1).strip()
+        v2 = str(v2).strip()
+        
+        # Edge cases
+        if v1 == v2:
+            return False
+        if not v1:
+            return False
+        if not v2:
+            return True
+        
+        def parse_version(v):
+            # Remove prefix like 'v'
+            if v.lower().startswith('v'):
+                v = v[1:]
+                
+            # Remove any non-numeric and non-dot characters
+            v = ''.join(c for c in v if c.isdigit() or c == '.')
+            
+            # Handle empty string case
+            if not v:
+                return [0]
+                
+            # Split into parts and convert to integers
+            parts = []
+            for part in v.split('.'):
+                try:
+                    parts.append(int(part))
+                except ValueError:
+                    parts.append(0)
+            return parts
+        
+        v1_parts = parse_version(v1)
+        v2_parts = parse_version(v2)
+        
+        # Pad with zeros to make lengths equal
+        max_len = max(len(v1_parts), len(v2_parts))
+        v1_parts.extend([0] * (max_len - len(v1_parts)))
+        v2_parts.extend([0] * (max_len - len(v2_parts)))
+        
+        print(f"Parsed versions: {v1_parts} > {v2_parts}")
+        
+        # Do the comparison
+        for i in range(max_len):
+            if v1_parts[i] > v2_parts[i]:
+                print(f"Result: {v1} is newer than {v2}")
+                return True
+            elif v1_parts[i] < v2_parts[i]:
+                print(f"Result: {v1} is older than {v2}")
+                return False
+                
+        # They're equal
+        print(f"Result: {v1} is the same as {v2}")
+        return False
+    except Exception as e:
+        print(f"Error comparing versions: {e}")
+        # If there's an error, assume the versions are the same
+        return False
 
 def check_updates_on_startup():
     """Check for updates when the application starts"""
+    global FORCE_UPDATE_CHECK
     try:
         log("\n=== Update Check Process Started ===")
+        print("\n=== UPDATE CHECK PROCESS STARTED ===")
         
-        # Check for application updates
-        if should_check_for_updates():
-            log("Starting application update check...")
-            latest_version = check_for_updates()
-            if latest_version:
-                log(f"New version {latest_version} available!")
-                if messagebox.askyesno("Update Available", 
-                                      f"Version {latest_version} is available. Would you like to update now?"):
-                    log("User chose to update")
-                    download_and_install_update(latest_version)
-                else:
-                    log("User chose not to update")
+        # Always check for application updates when manually initiated
+        log("Starting application update check...")
+        latest_release = check_for_updates()
+        
+        if latest_release:
+            latest_version = latest_release.get('tag_name', '').lstrip('v')
+            log(f"New version {latest_version} available!")
+            
+            if messagebox.askyesno("Update Available", 
+                                 f"Version {latest_version} is available. Would you like to update now?"):
+                log("User chose to update")
+                download_and_install_update(latest_release)
             else:
-                log("No updates available")
-            update_check_timestamp()
+                log("User chose not to update")
         else:
-            log("Skipping update check (checked recently)")
+            if FORCE_UPDATE_CHECK:
+                # Only show the "no updates" message if the user manually checked
+                messagebox.showinfo("No Updates", "You have the latest version.")
+            log("No updates available")
+        
+        # Always update the timestamp
+        update_check_timestamp()
             
         # Check for FFmpeg updates
         log("Starting FFmpeg update check...")
         check_ffmpeg_update()
         
         log("=== Update Check Process Completed ===\n")
+        print("=== UPDATE CHECK PROCESS COMPLETED ===\n")
+        
     except Exception as e:
         log(f"Error in update check process: {str(e)}")
+        print(f"Error in update check process: {str(e)}")
+        print(traceback.format_exc())
+        
+        if FORCE_UPDATE_CHECK:
+            # Show error message if user manually checked
+            messagebox.showerror("Update Check Failed", 
+                               f"Failed to check for updates: {str(e)}\n\n"
+                               "Please check your internet connection.")
+    
+    # Reset force flag after check
+    FORCE_UPDATE_CHECK = False
 
 def check_for_updates():
     """Check for updates on GitHub and return the latest version if available."""
     try:
         log("=== Starting Update Check ===")
-        log(f"GitHub API URL: {GITHUB_API_URL}")
+        print("\n=== CHECKING FOR UPDATES ===")
+        print(f"Current version: {CURRENT_VERSION}")
+        print(f"GitHub API URL: {GITHUB_API_URL}")
+        print(f"Repository: {REPO_OWNER}/{REPO_NAME}")
         
         # Make the request with headers to avoid rate limiting
         headers = {
             'Accept': 'application/vnd.github.v3+json',
-            'User-Agent': 'Yamin-media-downloader'
+            'User-Agent': f'Yamin-media-downloader/{CURRENT_VERSION}'
         }
-        response = requests.get(GITHUB_API_URL, headers=headers)
+        
+        print("Sending request to GitHub API...")
+        response = requests.get(GITHUB_API_URL, headers=headers, timeout=10)
         log(f"GitHub API Response Status: {response.status_code}")
+        print(f"GitHub API Response Status: {response.status_code}")
         
         if response.status_code != 200:
             log(f"GitHub API Error: {response.text}")
+            print(f"GitHub API Error: {response.text}")
             return None
             
         latest_release = response.json()
-        log(f"GitHub API Response: {json.dumps(latest_release, indent=2)}")
         
-        # Get the latest version number
-        latest_version = latest_release.get('tag_name', '').lstrip('v')
-        log(f"Latest version on GitHub: {latest_version}")
-        log(f"Current version: {CURRENT_VERSION}")
-        
-        if not latest_version:
-            log("No version tag found in release")
+        # Check if there's a valid release
+        if 'tag_name' not in latest_release:
+            log("No tag_name found in release")
+            print("No tag_name found in GitHub response")
             return None
             
-        # Compare versions
+        # Get the latest version number (strip v prefix if present)
+        latest_version = latest_release.get('tag_name', '').lstrip('v')
+        log(f"Latest version on GitHub: {latest_version}")
+        print(f"Latest version on GitHub: {latest_version}")
+        
+        if not latest_version:
+            log("Empty version tag found in release")
+            print("Empty version tag found in release")
+            return None
+            
+        # Compare versions with detailed logging
+        print(f"\n=== VERSION COMPARISON DETAILS ===")
+        print(f"Current version: {CURRENT_VERSION}")
+        print(f"Latest version: {latest_version}")
+        print(f"Comparison result: {compare_versions(latest_version, CURRENT_VERSION)}")
+        
         if compare_versions(latest_version, CURRENT_VERSION):
             log(f"New version {latest_version} is available!")
-            return latest_version
+            print(f"✅ New version {latest_version} is available!")
+            # Return the entire release data for use in download_and_install_update
+            return latest_release
         else:
             log("You have the latest version")
+            print("✓ You have the latest version")
             return None
     except requests.exceptions.RequestException as e:
         log(f"Network error checking for updates: {e}")
+        print(f"Network error checking for updates: {e}")
         return None
     except Exception as e:
         log(f"Unexpected error checking for updates: {e}")
+        print(f"Unexpected error checking for updates: {e}")
+        print(traceback.format_exc())
         return None
 
 def download_and_install_update(release):
     """Download and install the latest release."""
     try:
+        print("\n=== DOWNLOADING UPDATE ===")
+        
+        # If release is a string (legacy calls), convert to new format
+        if isinstance(release, str):
+            print(f"Converting legacy version string: {release}")
+            latest_version = release
+            # We need to fetch the release data
+            headers = {
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': f'Yamin-media-downloader/{CURRENT_VERSION}'
+            }
+            response = requests.get(GITHUB_API_URL, headers=headers, timeout=10)
+            if response.status_code != 200:
+                raise Exception(f"Could not fetch release data: {response.status_code}")
+            release = response.json()
+        else:
+            latest_version = release.get('tag_name', '').lstrip('v')
+        
+        print(f"Preparing to download version {latest_version}")
+        
         # Find the asset with .exe extension
-        exe_asset = next((asset for asset in release['assets'] if asset['name'].endswith('.exe')), None)
+        assets = release.get('assets', [])
+        print(f"Release has {len(assets)} assets")
+        
+        exe_asset = None
+        for asset in assets:
+            print(f"Asset: {asset.get('name')} ({asset.get('content_type')})")
+            if asset.get('name', '').lower().endswith('.exe'):
+                exe_asset = asset
+                break
+                
         if not exe_asset:
             raise Exception("No executable found in release assets")
         
@@ -724,32 +846,82 @@ def download_and_install_update(release):
             exe_path = temp_path / exe_asset['name']
             
             # Download the new version
+            download_url = exe_asset['browser_download_url']
+            print(f"Downloading from: {download_url}")
             log("Downloading update...")
-            response = requests.get(exe_asset['browser_download_url'], stream=True)
+            
+            # Show a message to inform the user that download is in progress
+            messagebox.showinfo("Downloading Update", 
+                               f"Downloading version {latest_version}...\n\n"
+                               "The application will restart automatically when the update is complete.")
+            
+            # Download with progress tracking
+            response = requests.get(download_url, stream=True)
             response.raise_for_status()
+            
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded = 0
             
             with open(exe_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
+                    downloaded += len(chunk)
                     f.write(chunk)
+                    # Calculate and print progress
+                    if total_size > 0:
+                        percent = (downloaded / total_size) * 100
+                        if percent % 10 < 1:  # Print every ~10%
+                            print(f"Download progress: {percent:.1f}% ({downloaded}/{total_size} bytes)")
             
-            # Create update script
+            print(f"Download complete: {exe_path}")
+            
+            # Create update script that will:
+            # 1. Wait for this process to exit
+            # 2. Delete the current executable
+            # 3. Move the new executable in place
+            # 4. Start the new version
             update_script = temp_path / "update.bat"
             current_exe = sys.executable
+            
+            print(f"Creating update script at: {update_script}")
+            print(f"Current executable: {current_exe}")
+            
             with open(update_script, 'w') as f:
                 f.write(f"""@echo off
+echo Waiting for application to close...
 timeout /t 2 /nobreak
+echo Updating Media Downloader...
 del "{current_exe}"
-move "{exe_path}" "{current_exe}"
-start "" "{current_exe}"
+if exist "{current_exe}" (
+    echo Retrying with force delete...
+    taskkill /f /im "{os.path.basename(current_exe)}" 2>nul
+    timeout /t 1 /nobreak
+    del /f "{current_exe}"
+)
+echo Copying new version...
+copy "{exe_path}" "{current_exe}"
+if exist "{current_exe}" (
+    echo Starting new version...
+    start "" "{current_exe}"
+) else (
+    echo ERROR: Failed to copy new version.
+    pause
+)
 """)
             
+            print("Running update script...")
             # Run update script and exit
             subprocess.Popen([str(update_script)], shell=True)
+            time.sleep(1)  # Give it a moment to start
+            print("Exiting for update...")
             sys.exit(0)
             
     except Exception as e:
-        log("Error installing update: {e}")
-        messagebox.showerror("Update Error", f"Failed to install update: {e}")
+        error_msg = str(e)
+        log(f"Error installing update: {error_msg}")
+        print(f"Error installing update: {error_msg}")
+        print(traceback.format_exc())
+        messagebox.showerror("Update Error", f"Failed to install update: {error_msg}")
+        return False
 
 def check_ffmpeg_update():
     """Check for FFmpeg updates."""
@@ -832,7 +1004,7 @@ help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About"
     "Created by Md Yamin Hossain\n" +
     "GitHub: https://github.com/needyamin\n\n" +
     "A powerful media downloader supporting multiple platforms."))
-help_menu.add_command(label="Check for Updates", command=check_updates_on_startup)
+help_menu.add_command(label="Check for Updates", command=lambda: force_check_updates())
 help_menu.add_separator()
 help_menu.add_command(label="Report Issue", 
     command=lambda: webbrowser.open("https://github.com/needyamin/media-downloader/issues"))
@@ -840,6 +1012,15 @@ help_menu.add_command(label="Report Issue",
 # Add debug command to Help menu
 help_menu.add_separator()
 help_menu.add_command(label="Debug Update System", command=debug_update_check)
+
+# Add function to force update check
+def force_check_updates():
+    """Force check for updates when user clicks menu item"""
+    global FORCE_UPDATE_CHECK
+    FORCE_UPDATE_CHECK = True
+    log("Forcing update check...")
+    print("\n=== FORCING UPDATE CHECK ===")
+    check_updates_on_startup()
 
 # Custom Widget Classes
 class ModernButton(ttk.Button):
