@@ -128,7 +128,7 @@ playlist_output_dir.mkdir(parents=True, exist_ok=True)
 # Auto-update configuration
 REPO_OWNER = "needyamin"
 REPO_NAME = "media-downloader"
-CURRENT_VERSION = "1.0.14"
+CURRENT_VERSION = "1.0.15"
 GITHUB_API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 UPDATE_CHECK_FILE = Path(os.environ["LOCALAPPDATA"]) / "Media Downloader" / "last_update_check.txt"
 
@@ -481,10 +481,7 @@ def debug_update_check():
         # Test version comparison
         log(f"\nTesting Version Comparison:")
         test_versions = [
-            ("1.0.0", "1.0.12"),
-            ("1.0.12", "1.0.12"),
-            ("1.0.13", "1.0.12"),
-            ("2.0.0", "1.0.12")
+            ("1.0.15", "1.0.14")
         ]
         for v1, v2 in test_versions:
             result = compare_versions(v1, v2)
@@ -1533,10 +1530,8 @@ def on_minimize(event):
 
 def on_close():
     """Handle window close event."""
-    if messagebox.askyesno("Exit", "Do you want to minimize to system tray instead of closing?"):
-        hide_window()
-    else:
-        root.quit()
+    messagebox.showinfo("Minimizing to Tray", "This application will minimize to system tray and continue running in background.")
+    hide_window()
 
 # Bind minimize and close events
 root.protocol('WM_DELETE_WINDOW', on_close)
@@ -1724,19 +1719,19 @@ def download_media(is_audio):
             update_progress(0, "Ready to download")
             return
 
-        # Configure format and quality settings
+        # Configure format and quality settings for highest quality
         if is_audio:
             format_code = 'bestaudio/best'
             log(f"Downloading audio with settings:")
             log(f"- Format: {format_code}")
             log(f"- Quality: {current_audio_quality}kbps")
         else:
+            # Updated format selection for highest quality
             if current_video_quality == 'best':
-                # Use a simpler format string that's more compatible
-                format_code = 'best[ext=mp4]/best'
+                format_code = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'
             else:
-                # For numeric qualities, use a simpler format string
-                format_code = f'best[height<={current_video_quality}][ext=mp4]/best[height<={current_video_quality}]/best'
+                format_code = f'bestvideo[height<={current_video_quality}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={current_video_quality}]+bestaudio/best[height<={current_video_quality}]'
+            
             log(f"Downloading video with settings:")
             log(f"- Format: {format_code}")
             log(f"- Quality: {current_video_quality}")
@@ -1777,9 +1772,11 @@ def download_media(is_audio):
                 'preferredquality': current_audio_quality,
             }]
         else:
-            # For video downloads, let's try without a postprocessor first
-            # This often works better for many sites
-            pass  # Don't add any postprocessors for video
+            # For video downloads, add postprocessor to ensure best quality
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': current_format,
+            }]
 
         ydl_instance = yt_dlp.YoutubeDL(ydl_opts)
         try:
