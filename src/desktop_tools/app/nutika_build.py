@@ -83,11 +83,20 @@ def ensure_build_dependencies() -> None:
     ensure_python_package("PIL", "pillow")
     ensure_python_package("pyperclip", "pyperclip")
     ensure_python_package("pystray", "pystray")
+    ensure_python_package("win32com", "pywin32")
     ensure_python_package("validators", "validators")
     ensure_python_package("requests", "requests")
+    ensure_python_package("certifi", "certifi")
     ensure_python_package("customtkinter", "customtkinter")
+    ensure_python_package("numpy", "numpy")
     ensure_python_package("rembg", "rembg")
     ensure_python_package("onnxruntime", "onnxruntime")
+    ensure_python_package("scipy", "scipy")
+    ensure_python_package("skimage", "scikit-image")
+    ensure_python_package("pymatting", "pymatting")
+    ensure_python_package("pooch", "pooch")
+    ensure_python_package("tqdm", "tqdm")
+    ensure_python_package("jsonschema", "jsonschema")
 
     if REQUIREMENTS_FILE.exists():
         print(f"Ensuring application requirements from {REQUIREMENTS_FILE}...")
@@ -100,6 +109,13 @@ def ensure_build_dependencies() -> None:
         except subprocess.CalledProcessError as exc:
             print("Failed to install application requirements for the Windows build.")
             raise SystemExit(1) from exc
+
+
+def ensure_windows_environment() -> None:
+    """Stop early when the Windows build script is run on another platform."""
+    if os.name != "nt":
+        print("The Nuitka Windows build script must be run on Windows.")
+        raise SystemExit(1)
 
 
 def select_compiler_arguments() -> list[str]:
@@ -277,6 +293,7 @@ def build_inno_installer() -> None:
 
 def main() -> None:
     print("Starting build process...")
+    ensure_windows_environment()
     ensure_build_dependencies()
     clean_directories()
     build_executable()

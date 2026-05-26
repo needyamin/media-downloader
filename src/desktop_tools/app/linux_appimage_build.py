@@ -58,9 +58,17 @@ def ensure_build_dependencies() -> None:
     ensure_python_package("pystray", "pystray")
     ensure_python_package("validators", "validators")
     ensure_python_package("requests", "requests")
+    ensure_python_package("certifi", "certifi")
     ensure_python_package("customtkinter", "customtkinter")
+    ensure_python_package("numpy", "numpy")
     ensure_python_package("rembg", "rembg")
     ensure_python_package("onnxruntime", "onnxruntime")
+    ensure_python_package("scipy", "scipy")
+    ensure_python_package("skimage", "scikit-image")
+    ensure_python_package("pymatting", "pymatting")
+    ensure_python_package("pooch", "pooch")
+    ensure_python_package("tqdm", "tqdm")
+    ensure_python_package("jsonschema", "jsonschema")
 
     if REQUIREMENTS_FILE.exists():
         print(f"Ensuring application requirements from {REQUIREMENTS_FILE}...")
