@@ -3,6 +3,7 @@ import threading
 import tkinter as tk
 from tkinter import Tk, filedialog, ttk, StringVar, TclError, messagebox, Menu, Toplevel
 from tkinter.messagebox import showinfo, showerror
+import importlib
 from PIL import Image, ImageTk
 import requests
 import tempfile
@@ -22,6 +23,7 @@ from desktop_tools.shared.resources import apply_window_icon, center_window
 MISSING_DEPENDENCIES = []
 DEPENDENCY_ERRORS = {}
 IS_WINDOWS = os.name == "nt"
+DEPENDENCY_DIAGNOSTICS_REPORT = None
 
 
 def register_dependency_error(name, exc):
@@ -94,7 +96,10 @@ def get_base_path():
 def is_packaged_runtime():
     """Return True when running from a packaged executable instead of source."""
     executable_name = Path(sys.executable).name.lower()
-    return bool(getattr(sys, "frozen", False)) and executable_name not in {"python.exe", "pythonw.exe"}
+    return (
+        bool(getattr(sys, "frozen", False))
+        or globals().get("__compiled__") is not None
+    ) and executable_name not in {"python.exe", "pythonw.exe"}
 
 def get_asset_path(*parts):
     return os.path.join(get_base_path(), "assets", *parts)
@@ -108,6 +113,48 @@ def show_startup_error(title, message):
         root.destroy()
     except TclError:
         print(f"{title}: {message}")
+
+def collect_dependency_diagnostics():
+    """Probe the BG remover import chain and return a detailed diagnostic report."""
+    checks = [
+        ("onnxruntime", "onnxruntime", ()),
+        ("onnxruntime.capi._pybind_state", "onnxruntime.capi._pybind_state", ()),
+        ("onnxruntime.capi.onnxruntime_pybind11_state", "onnxruntime.capi.onnxruntime_pybind11_state", ()),
+        ("numpy", "numpy", ()),
+        ("scipy.ndimage", "scipy.ndimage", ("binary_erosion", "gaussian_filter")),
+        ("skimage.morphology", "skimage.morphology", ("disk", "opening")),
+        ("pymatting.alpha.estimate_alpha_cf", "pymatting.alpha.estimate_alpha_cf", ("estimate_alpha_cf",)),
+        ("pymatting.foreground.estimate_foreground_ml", "pymatting.foreground.estimate_foreground_ml", ("estimate_foreground_ml",)),
+        ("pymatting.util.util", "pymatting.util.util", ("stack_images",)),
+        ("pooch", "pooch", ()),
+        ("Pillow", "PIL.Image", ("Image",)),
+        ("customtkinter", "customtkinter", ()),
+    ]
+
+    lines = []
+    for label, module_name, attrs in checks:
+        try:
+            module = importlib.import_module(module_name)
+            for attr_name in attrs:
+                getattr(module, attr_name)
+            lines.append(f"- {label}: OK")
+        except BaseException as exc:
+            lines.append(f"- {label}: {type(exc).__name__}: {exc}")
+
+    return "\n".join(lines)
+
+def write_dependency_diagnostics_report(details_text):
+    """Persist BG remover diagnostics to a temp file for packaged-build debugging."""
+    global DEPENDENCY_DIAGNOSTICS_REPORT
+
+    try:
+        report_path = Path(tempfile.gettempdir()) / "media_downloader_bg_remover_diagnostics.txt"
+        report_path.write_text(details_text, encoding="utf-8")
+        DEPENDENCY_DIAGNOSTICS_REPORT = report_path
+        return report_path
+    except Exception:
+        DEPENDENCY_DIAGNOSTICS_REPORT = None
+        return None
 
 class BackgroundRemoverApp:
     def __init__(self, master):
@@ -960,6 +1007,15 @@ def ensure_background_remover_dependencies(parent=None):
         f"- {name}: {error}"
         for name, error in DEPENDENCY_ERRORS.items()
     )
+    nested_diagnostics = collect_dependency_diagnostics()
+    report_sections = []
+    if details:
+        report_sections.append("Dependency load details:\n" + details)
+    if nested_diagnostics:
+        report_sections.append("Nested runtime checks:\n" + nested_diagnostics)
+    full_report = "\n\n".join(report_sections)
+    diagnostics_path = write_dependency_diagnostics_report(full_report) if full_report else None
+
     if is_packaged_runtime():
         install_hint = (
             "The packaged BG Remover runtime could not be loaded.\n\n"
@@ -974,8 +1030,10 @@ def ensure_background_remover_dependencies(parent=None):
             "Install them with:\n"
             "python -m pip install -r src\\desktop_tools\\app\\requirements.txt"
         )
-    if details:
-        install_hint += f"\n\nDependency load details:\n{details}"
+    if full_report:
+        install_hint += f"\n\n{full_report}"
+    if diagnostics_path is not None:
+        install_hint += f"\n\nDiagnostic report saved to:\n{diagnostics_path}"
 
     if parent is None:
         show_startup_error("Missing Dependencies", install_hint)

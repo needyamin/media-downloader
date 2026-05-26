@@ -29,10 +29,8 @@ CPU_JOBS = max(1, os.cpu_count() or 1)
 EXCLUDED_IMPORTS = [
     "IPython",
     "matplotlib",
-    "numba",
     "pandas",
     "pytest",
-    "llvmlite",
     "jupyter",
     "setuptools",
     "win32com.test",
@@ -91,6 +89,8 @@ def ensure_build_dependencies() -> None:
     ensure_python_package("certifi", "certifi")
     ensure_python_package("customtkinter", "customtkinter")
     ensure_python_package("numpy", "numpy")
+    ensure_python_package("numba", "numba")
+    ensure_python_package("llvmlite", "llvmlite")
     ensure_python_package("rembg", "rembg")
     ensure_python_package("onnxruntime", "onnxruntime")
     ensure_python_package("scipy", "scipy")
@@ -190,6 +190,8 @@ def build_executable() -> None:
         "--include-package=desktop_tools",
         "--include-package=customtkinter",
         "--include-package=numpy",
+        "--include-package=numba",
+        "--include-package=llvmlite",
         "--include-package=rembg",
         "--include-package=onnxruntime",
         "--include-package=scipy",
