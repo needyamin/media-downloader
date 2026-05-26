@@ -5,7 +5,7 @@ A desktop application developed for educational and personal use, designed to he
 The main entry opens the Media Downloader window directly. Extra tools such as `Video Converter` and `BG Remover` are available from the downloader menu bar and reuse the same shared FFmpeg installation where needed.
 
 ## Application Preview
-![Image](https://github.com/user-attachments/assets/c4984fc3-5efb-43f4-9533-4092a2d1caaf)
+![Image](https://github.com/user-attachments/assets/9be2138d-cb43-425d-b8f9-a3c53309076f)
 
 ## Features
 
