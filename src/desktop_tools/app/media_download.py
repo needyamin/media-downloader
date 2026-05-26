@@ -11,6 +11,7 @@ from pystray import MenuItem as item
 from PIL import Image, ImageTk, ImageSequence, ImageDraw
 import sys
 import ctypes
+from ctypes import wintypes
 import re
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -40,6 +41,13 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 IS_WINDOWS = sys.platform.startswith("win")
+WM_HOTKEY = 0x0312
+WM_QUIT = 0x0012
+MOD_CONTROL = 0x0002
+MOD_SHIFT = 0x0004
+MOD_NOREPEAT = 0x4000
+SCREENSHOT_HOTKEY_ID = 0x594D
+SCREENSHOT_HOTKEY_LABEL = "Ctrl+Shift+Y"
 
 try:
     from desktop_tools.shared.resources import apply_window_icon, center_window, get_asset_path, get_project_root, get_user_data_dir
@@ -1472,6 +1480,24 @@ def open_background_remover():
         log(f"Error opening background remover: {e}")
         messagebox.showerror("Background Remover Error", f"Could not open the background remover:\n{e}")
 
+def open_screenshot_studio():
+    """Open YShoot from the downloader menu bar."""
+    try:
+        from desktop_tools.app.screenshot_app import open_screenshot_studio as launch_screenshot_studio
+
+        screenshot_window = launch_screenshot_studio(root)
+        if screenshot_window is not None:
+            log("Opened YShoot")
+    except Exception as e:
+        log(f"Error opening screenshot studio: {e}")
+        messagebox.showerror("YShoot Error", f"Could not open YShoot:\n{e}")
+
+def trigger_screenshot_studio(event=None):
+    """Open YShoot from the GUI or keyboard shortcut."""
+    open_screenshot_studio()
+    if event is not None:
+        return "break"
+
 def persist_max_files_value(event=None):
     """Normalize and save the playlist max-files value."""
     sanitized_value = current_max_files_value()
@@ -2423,6 +2449,7 @@ tools_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="Tools", menu=tools_menu)
 tools_menu.add_command(label="Video Converter", command=open_converter)
 tools_menu.add_command(label="BG Remover", command=open_background_remover)
+tools_menu.add_command(label="YShoot", accelerator=SCREENSHOT_HOTKEY_LABEL, command=open_screenshot_studio)
 
 # Help Menu
 help_menu = tk.Menu(menubar, tearoff=0)
@@ -2793,6 +2820,76 @@ last_clipboard_value = ""
 recent_clipboard_urls = deque(maxlen=CLIPBOARD_RECENT_LIMIT)
 tray_icon = None
 tray_thread = None
+screenshot_hotkey_thread = None
+screenshot_hotkey_thread_id = None
+screenshot_hotkey_registered = False
+
+def _run_screenshot_hotkey_listener():
+    """Listen for the global screenshot hotkey while the app is in the background."""
+    global screenshot_hotkey_thread_id, screenshot_hotkey_registered
+
+    if not IS_WINDOWS:
+        return
+
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    screenshot_hotkey_thread_id = int(kernel32.GetCurrentThreadId())
+    modifiers = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
+    message = wintypes.MSG()
+
+    try:
+        if not user32.RegisterHotKey(None, SCREENSHOT_HOTKEY_ID, modifiers, ord('Y')):
+            log(f"Global screenshot hotkey unavailable: {SCREENSHOT_HOTKEY_LABEL}")
+            return
+
+        screenshot_hotkey_registered = True
+        log(f"Global screenshot hotkey ready: {SCREENSHOT_HOTKEY_LABEL}")
+
+        while True:
+            result = user32.GetMessageW(ctypes.byref(message), None, 0, 0)
+            if result in (0, -1):
+                break
+
+            if message.message == WM_HOTKEY and int(message.wParam) == SCREENSHOT_HOTKEY_ID:
+                try:
+                    root.after(0, trigger_screenshot_studio)
+                except Exception as exc:
+                    log(f"Error opening screenshot studio from hotkey: {exc}")
+    finally:
+        if screenshot_hotkey_registered:
+            try:
+                user32.UnregisterHotKey(None, SCREENSHOT_HOTKEY_ID)
+            except Exception:
+                pass
+        screenshot_hotkey_registered = False
+        screenshot_hotkey_thread_id = None
+
+def start_screenshot_hotkey_listener():
+    """Start the Windows global hotkey listener once per app session."""
+    global screenshot_hotkey_thread
+
+    if not IS_WINDOWS:
+        return False
+
+    if screenshot_hotkey_thread is not None and screenshot_hotkey_thread.is_alive():
+        return True
+
+    screenshot_hotkey_thread = threading.Thread(
+        target=_run_screenshot_hotkey_listener,
+        daemon=True,
+    )
+    screenshot_hotkey_thread.start()
+    return True
+
+def stop_screenshot_hotkey_listener():
+    """Stop the background screenshot hotkey listener cleanly."""
+    if not IS_WINDOWS or screenshot_hotkey_thread_id is None:
+        return
+
+    try:
+        ctypes.windll.user32.PostThreadMessageW(screenshot_hotkey_thread_id, WM_QUIT, 0, 0)
+    except Exception:
+        pass
 
 # Options Frame
 options_frame = tk.Frame(main_frame, bg=THEME['bg'])
@@ -3146,6 +3243,7 @@ def build_tray_menu():
         item('Tools', pystray.Menu(
             item('Video Converter', lambda icon=None, menu_item=None: tray_run_ui_action(open_converter)),
             item('BG Remover', lambda icon=None, menu_item=None: tray_run_ui_action(open_background_remover)),
+            item('YShoot', lambda icon=None, menu_item=None: tray_run_ui_action(open_screenshot_studio)),
         )),
         item('Help', pystray.Menu(
             item('About Us', lambda icon=None, menu_item=None: tray_run_ui_action(show_about_window)),
@@ -3202,9 +3300,11 @@ def on_close():
 # Bind minimize and close events
 root.protocol('WM_DELETE_WINDOW', on_close)
 root.bind('<Unmap>', on_minimize)  # Handle minimize button click
+root.bind_all('<Control-Shift-Y>', trigger_screenshot_studio)
 
 # Start tray icon
 create_tray_icon()
+start_screenshot_hotkey_listener()
 
 # Update progress function to show percentage in status
 def update_progress(percent, message=None):
@@ -3877,6 +3977,7 @@ if __name__ == "__main__":
         sys.exit(0)
     finally:
         # Clean up tray icon when exiting
+        stop_screenshot_hotkey_listener()
         if tray_icon is not None:
             tray_icon.stop()
 

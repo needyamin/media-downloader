@@ -174,6 +174,7 @@ def build_pyinstaller_bundle() -> Path:
         "--collect-all=jsonschema",
         "--hidden-import=desktop_tools.app.converter_app",
         "--hidden-import=desktop_tools.app.background_remover_app",
+        "--hidden-import=desktop_tools.app.screenshot_app",
         "--hidden-import=rembg",
         "--hidden-import=onnxruntime",
         "--hidden-import=onnxruntime.capi.onnxruntime_pybind11_state",

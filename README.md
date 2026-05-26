@@ -66,6 +66,17 @@ The main entry opens the Media Downloader window directly. Extra tools such as `
        ```
        ./src/desktop_tools/app/build_linux_appimage.sh
        ```
+     - On Windows, you can build the same AppImage through Ubuntu WSL:
+       - First-time WSL setup:
+         ```powershell
+         wsl.exe -d Ubuntu -u root -- sh -lc "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv python3-dev python3-tk build-essential patchelf file zsync libglib2.0-0 libnss3 libgtk-3-0 libx11-6 libxkbcommon0 libdbus-1-3 libasound2t64 libtbb12"
+         wsl.exe -d Ubuntu -- sh -lc "cd /mnt/c/Users/<your-user>/Desktop/media-downloader && python3 -m venv .venv-wsl && . .venv-wsl/bin/activate && python src/desktop_tools/app/linux_appimage_build.py"
+         ```
+       - Later rebuilds:
+         ```powershell
+         wsl.exe -d Ubuntu -- sh -lc "cd /mnt/c/Users/<your-user>/Desktop/media-downloader && . .venv-wsl/bin/activate && python src/desktop_tools/app/linux_appimage_build.py"
+         ```
+       - If your default WSL distro is not Ubuntu, keep the explicit `-d Ubuntu` so the build does not accidentally target another distro such as `docker-desktop`
      - Find the output in `release/linux`
 
 ## Usage
