@@ -15,6 +15,11 @@ pyinstaller>=6.0.0      # Linux AppImage build flow
 # Platform-specific requirements (auto-installed)
 # - tkinter (Python built-in)
 # - ctypes (Python built-in)
+# - Linux runtime tools:
+#   - ffmpeg + ffprobe (required for YScreenRecorder on Linux/X11)
+#   - wl-clipboard for Wayland clipboard image copy
+#   - xclip for X11 clipboard image copy
+#   - grim, gnome-screenshot, scrot, or ImageMagick 'import' as screenshot fallbacks
 
 # Development dependencies
 # These are only needed for building the installer

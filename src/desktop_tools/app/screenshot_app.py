@@ -1,8 +1,7 @@
-"""YShoot screenshot overlay with a compact floating toolbar."""
+"""YScreenshot screenshot overlay with a compact floating toolbar."""
 
 from __future__ import annotations
 
-import ctypes
 import io
 import math
 import sys
@@ -11,7 +10,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox
 
-from PIL import Image, ImageDraw, ImageFont, ImageGrab, ImageTk
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 try:
     import win32clipboard
@@ -21,6 +20,8 @@ except Exception:
 SRC_DIR = Path(__file__).resolve().parents[2]
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
+
+from desktop_tools.shared.capture_support import capture_desktop_snapshot, copy_image_to_linux_clipboard
 
 TOOL_SPECS = {
     "pen": {"icon": "✎", "label": "Pen"},
@@ -61,25 +62,8 @@ SELECTION_OUTLINE = "#38BDF8"
 screenshot_window = None
 
 
-def _get_virtual_screen_geometry(fallback_window):
-    """Return the virtual desktop bounds for single- and multi-monitor setups."""
-    if sys.platform.startswith("win"):
-        try:
-            user32 = ctypes.windll.user32
-            x = int(user32.GetSystemMetrics(76))
-            y = int(user32.GetSystemMetrics(77))
-            width = int(user32.GetSystemMetrics(78))
-            height = int(user32.GetSystemMetrics(79))
-            if width > 0 and height > 0:
-                return x, y, width, height
-        except Exception:
-            pass
-
-    return 0, 0, fallback_window.winfo_screenwidth(), fallback_window.winfo_screenheight()
-
-
 class ScreenshotOverlay(tk.Toplevel):
-    """A compact YShoot overlay for selecting and annotating screenshots."""
+    """A compact YScreenshot overlay for selecting and annotating screenshots."""
 
     def __init__(self, parent=None):
         self._standalone_root = None
@@ -91,8 +75,7 @@ class ScreenshotOverlay(tk.Toplevel):
         super().__init__(parent)
         self.parent_window = parent if isinstance(parent, (tk.Tk, tk.Toplevel)) else None
 
-        self.virtual_x, self.virtual_y, self.screen_width, self.screen_height = _get_virtual_screen_geometry(self)
-        self.base_image = self._capture_screen()
+        self.base_image, self.virtual_x, self.virtual_y, self.screen_width, self.screen_height = self._capture_screen()
         self.dimmed_image = Image.blend(
             self.base_image,
             Image.new("RGBA", self.base_image.size, (0, 0, 0, 255)),
@@ -161,16 +144,10 @@ class ScreenshotOverlay(tk.Toplevel):
 
     def _capture_screen(self):
         try:
-            image = ImageGrab.grab(all_screens=True).convert("RGBA")
-        except TypeError:
-            image = ImageGrab.grab().convert("RGBA")
+            return capture_desktop_snapshot(self)
         except Exception as exc:
             self.destroy()
             raise RuntimeError(f"Could not capture the screen: {exc}") from exc
-
-        if image.size != (self.screen_width, self.screen_height):
-            image = image.resize((self.screen_width, self.screen_height), Image.LANCZOS)
-        return image
 
     def _bind_events(self):
         self.bind("<Escape>", lambda event: self.on_close())
@@ -192,7 +169,7 @@ class ScreenshotOverlay(tk.Toplevel):
                 anchor="w",
                 fill=HUD_TEXT,
                 font=("Segoe UI", 11, "bold"),
-                text="YShoot: drag to select an area",
+                text="YScreenshot: drag to select an area",
             )
         )
         self.help_items.append(
@@ -1021,7 +998,7 @@ class ScreenshotOverlay(tk.Toplevel):
         self._commit_text_editor()
         if self.selection_box is None:
             dialog_parent = self.parent_window if self.parent_window and self.parent_window.winfo_exists() else self
-            messagebox.showinfo("YShoot", "Select an area first.", parent=dialog_parent)
+            messagebox.showinfo("YScreenshot", "Select an area first.", parent=dialog_parent)
             return
 
         dialog_parent = self.parent_window if self.parent_window and self.parent_window.winfo_exists() else self
@@ -1061,30 +1038,34 @@ class ScreenshotOverlay(tk.Toplevel):
         self._commit_text_editor()
         if self.selection_box is None:
             dialog_parent = self.parent_window if self.parent_window and self.parent_window.winfo_exists() else self
-            messagebox.showinfo("YShoot", "Select an area first.", parent=dialog_parent)
+            messagebox.showinfo("YScreenshot", "Select an area first.", parent=dialog_parent)
             return
 
-        if not sys.platform.startswith("win") or win32clipboard is None:
-            dialog_parent = self.parent_window if self.parent_window and self.parent_window.winfo_exists() else self
-            messagebox.showinfo("YShoot", "Clipboard image copy is currently available on Windows only.", parent=dialog_parent)
-            return
+        dialog_parent = self.parent_window if self.parent_window and self.parent_window.winfo_exists() else self
 
         try:
-            image = self._render_selection_crop().convert("RGB")
-            output = io.BytesIO()
-            image.save(output, "BMP")
-            data = output.getvalue()[14:]
-            output.close()
+            image = self._render_selection_crop()
+            if sys.platform.startswith("win") and win32clipboard is not None:
+                output = io.BytesIO()
+                image.convert("RGB").save(output, "BMP")
+                data = output.getvalue()[14:]
+                output.close()
 
-            win32clipboard.OpenClipboard()
-            try:
-                win32clipboard.EmptyClipboard()
-                win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
-            finally:
-                win32clipboard.CloseClipboard()
+                win32clipboard.OpenClipboard()
+                try:
+                    win32clipboard.EmptyClipboard()
+                    win32clipboard.SetClipboardData(win32clipboard.CF_DIB, data)
+                finally:
+                    win32clipboard.CloseClipboard()
+                return
+
+            if sys.platform.startswith("linux"):
+                copy_image_to_linux_clipboard(image)
+                return
+
+            messagebox.showinfo("YScreenshot", "Clipboard image copy is currently available on Windows and Linux only.", parent=dialog_parent)
         except Exception as exc:
-            dialog_parent = self.parent_window if self.parent_window and self.parent_window.winfo_exists() else self
-            messagebox.showerror("YShoot", f"Could not copy the screenshot:\n{exc}", parent=dialog_parent)
+            messagebox.showerror("YScreenshot", f"Could not copy the screenshot:\n{exc}", parent=dialog_parent)
 
     def on_close(self):
         global screenshot_window
@@ -1102,7 +1083,7 @@ class ScreenshotOverlay(tk.Toplevel):
 
 
 def open_screenshot_studio(parent=None):
-    """Open the YShoot screenshot overlay as a singleton."""
+    """Open the YScreenshot overlay as a singleton."""
     global screenshot_window
 
     if screenshot_window is not None and screenshot_window.winfo_exists():

@@ -156,6 +156,7 @@ def find_existing_ffmpeg(extra_paths: list[Path] | None = None, logger=None) -> 
     """Look for a valid FFmpeg install in standard and optional locations."""
     managed_ffmpeg, managed_ffprobe = get_managed_ffmpeg_paths()
     potential_ffmpeg_paths = [managed_ffmpeg]
+    executable_suffix = ".exe" if IS_WINDOWS else ""
     if logger:
         logger("Searching for an existing FFmpeg installation...")
     if extra_paths:
@@ -182,7 +183,7 @@ def find_existing_ffmpeg(extra_paths: list[Path] | None = None, logger=None) -> 
         if not ffmpeg_path:
             continue
         ffmpeg_path = Path(ffmpeg_path)
-        ffprobe_path = ffmpeg_path.parent / "ffprobe.exe"
+        ffprobe_path = ffmpeg_path.parent / f"ffprobe{executable_suffix}"
         if logger:
             logger(f"Checking FFmpeg path: {ffmpeg_path}")
         if ffmpeg_path.exists() and verify_ffmpeg_binaries(ffmpeg_path, ffprobe_path, logger=logger):
@@ -208,7 +209,10 @@ def download_managed_ffmpeg(logger=None, progress_callback=None, release_tag: st
 
     if not IS_WINDOWS:
         if logger:
-            logger("Automatic FFmpeg download is currently only bundled for Windows builds. Install ffmpeg from your Linux package manager.")
+            logger(
+                "Automatic FFmpeg download is currently only bundled for Windows builds. "
+                "Install both ffmpeg and ffprobe from your Linux package manager."
+            )
         return None, None
 
     for download_url in FFMPEG_DOWNLOAD_URLS:
@@ -278,7 +282,13 @@ def ensure_managed_ffmpeg(extra_paths: list[Path] | None = None, logger=None, pr
         record_managed_ffmpeg_state(ffmpeg_path, ffprobe_path)
         return ffmpeg_path, ffprobe_path
     if logger:
-        logger("FFmpeg not found. Starting automatic download...")
+        if IS_WINDOWS:
+            logger("FFmpeg not found. Starting automatic download...")
+        else:
+            logger(
+                "FFmpeg was not found. Install packages such as 'ffmpeg' and 'ffprobe' first "
+                "(for example: sudo apt install ffmpeg)."
+            )
     return download_managed_ffmpeg(logger=logger, progress_callback=progress_callback)
 
 
@@ -295,6 +305,8 @@ def update_managed_ffmpeg_if_needed(
         progress_callback=progress_callback,
     )
     if not ffmpeg_path or not ffprobe_path:
+        return ffmpeg_path, ffprobe_path, False
+    if not IS_WINDOWS:
         return ffmpeg_path, ffprobe_path, False
 
     latest_release = fetch_latest_ffmpeg_release_info(logger=logger)

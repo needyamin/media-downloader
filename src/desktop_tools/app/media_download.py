@@ -46,6 +46,10 @@ WM_QUIT = 0x0012
 MOD_CONTROL = 0x0002
 MOD_SHIFT = 0x0004
 MOD_NOREPEAT = 0x4000
+CONVERTER_HOTKEY_ID = 0x5943
+CONVERTER_HOTKEY_LABEL = "Ctrl+Shift+V"
+BG_REMOVER_HOTKEY_ID = 0x5942
+BG_REMOVER_HOTKEY_LABEL = "Ctrl+Shift+B"
 SCREENSHOT_HOTKEY_ID = 0x594D
 SCREENSHOT_HOTKEY_LABEL = "Ctrl+Shift+Y"
 SCREENRECORDER_HOTKEY_ID = 0x5952
@@ -1482,20 +1486,32 @@ def open_background_remover():
         log(f"Error opening background remover: {e}")
         messagebox.showerror("Background Remover Error", f"Could not open the background remover:\n{e}")
 
+def trigger_converter(event=None):
+    """Open the converter from the GUI or keyboard shortcut."""
+    open_converter()
+    if event is not None:
+        return "break"
+
+def trigger_background_remover(event=None):
+    """Open the background remover from the GUI or keyboard shortcut."""
+    open_background_remover()
+    if event is not None:
+        return "break"
+
 def open_screenshot_studio():
-    """Open YShoot from the downloader menu bar."""
+    """Open YScreenshot from the downloader menu bar."""
     try:
         from desktop_tools.app.screenshot_app import open_screenshot_studio as launch_screenshot_studio
 
         screenshot_window = launch_screenshot_studio(root)
         if screenshot_window is not None:
-            log("Opened YShoot")
+            log("Opened YScreenshot")
     except Exception as e:
         log(f"Error opening screenshot studio: {e}")
-        messagebox.showerror("YShoot Error", f"Could not open YShoot:\n{e}")
+        messagebox.showerror("YScreenshot Error", f"Could not open YScreenshot:\n{e}")
 
 def trigger_screenshot_studio(event=None):
-    """Open YShoot from the GUI or keyboard shortcut."""
+    """Open YScreenshot from the GUI or keyboard shortcut."""
     open_screenshot_studio()
     if event is not None:
         return "break"
@@ -2467,9 +2483,9 @@ settings_menu.add_command(label="Install / Update FFmpeg", command=force_install
 # Tools Menu
 tools_menu = tk.Menu(menubar, tearoff=0)
 menubar.add_cascade(label="Tools", menu=tools_menu)
-tools_menu.add_command(label="Video Converter", command=open_converter)
-tools_menu.add_command(label="BG Remover", command=open_background_remover)
-tools_menu.add_command(label="YShoot", accelerator=SCREENSHOT_HOTKEY_LABEL, command=open_screenshot_studio)
+tools_menu.add_command(label="Video Converter", accelerator=CONVERTER_HOTKEY_LABEL, command=open_converter)
+tools_menu.add_command(label="BG Remover", accelerator=BG_REMOVER_HOTKEY_LABEL, command=open_background_remover)
+tools_menu.add_command(label="YScreenshot", accelerator=SCREENSHOT_HOTKEY_LABEL, command=open_screenshot_studio)
 tools_menu.add_command(label="YScreenRecorder", accelerator=SCREENRECORDER_HOTKEY_LABEL, command=open_yscreenrecorder)
 
 # Help Menu
@@ -2843,12 +2859,15 @@ tray_icon = None
 tray_thread = None
 screenshot_hotkey_thread = None
 screenshot_hotkey_thread_id = None
+converter_hotkey_registered = False
+background_remover_hotkey_registered = False
 screenshot_hotkey_registered = False
 screenrecorder_hotkey_registered = False
 
 def _run_screenshot_hotkey_listener():
-    """Listen for the global screenshot hotkey while the app is in the background."""
-    global screenshot_hotkey_thread_id, screenshot_hotkey_registered, screenrecorder_hotkey_registered
+    """Listen for the global desktop tool hotkeys while the app is in the background."""
+    global screenshot_hotkey_thread_id, converter_hotkey_registered, background_remover_hotkey_registered
+    global screenshot_hotkey_registered, screenrecorder_hotkey_registered
 
     if not IS_WINDOWS:
         return
@@ -2860,6 +2879,14 @@ def _run_screenshot_hotkey_listener():
     message = wintypes.MSG()
 
     try:
+        converter_registered = bool(user32.RegisterHotKey(None, CONVERTER_HOTKEY_ID, modifiers, ord('V')))
+        if not converter_registered:
+            log(f"Global converter hotkey unavailable: {CONVERTER_HOTKEY_LABEL}")
+
+        background_remover_registered = bool(user32.RegisterHotKey(None, BG_REMOVER_HOTKEY_ID, modifiers, ord('B')))
+        if not background_remover_registered:
+            log(f"Global background remover hotkey unavailable: {BG_REMOVER_HOTKEY_LABEL}")
+
         screenshot_registered = bool(user32.RegisterHotKey(None, SCREENSHOT_HOTKEY_ID, modifiers, ord('Y')))
         if not screenshot_registered:
             log(f"Global screenshot hotkey unavailable: {SCREENSHOT_HOTKEY_LABEL}")
@@ -2868,11 +2895,17 @@ def _run_screenshot_hotkey_listener():
         if not recorder_registered:
             log(f"Global screen recorder hotkey unavailable: {SCREENRECORDER_HOTKEY_LABEL}")
 
-        if not screenshot_registered and not recorder_registered:
+        if not converter_registered and not background_remover_registered and not screenshot_registered and not recorder_registered:
             return
 
+        converter_hotkey_registered = converter_registered
+        background_remover_hotkey_registered = background_remover_registered
         screenshot_hotkey_registered = screenshot_registered
         screenrecorder_hotkey_registered = recorder_registered
+        if converter_registered:
+            log(f"Global converter hotkey ready: {CONVERTER_HOTKEY_LABEL}")
+        if background_remover_registered:
+            log(f"Global background remover hotkey ready: {BG_REMOVER_HOTKEY_LABEL}")
         if screenshot_registered:
             log(f"Global screenshot hotkey ready: {SCREENSHOT_HOTKEY_LABEL}")
         if recorder_registered:
@@ -2886,13 +2919,27 @@ def _run_screenshot_hotkey_listener():
             if message.message == WM_HOTKEY:
                 try:
                     hotkey_id = int(message.wParam)
-                    if hotkey_id == SCREENSHOT_HOTKEY_ID:
+                    if hotkey_id == CONVERTER_HOTKEY_ID:
+                        root.after(0, trigger_converter)
+                    elif hotkey_id == BG_REMOVER_HOTKEY_ID:
+                        root.after(0, trigger_background_remover)
+                    elif hotkey_id == SCREENSHOT_HOTKEY_ID:
                         root.after(0, trigger_screenshot_studio)
                     elif hotkey_id == SCREENRECORDER_HOTKEY_ID:
                         root.after(0, trigger_yscreenrecorder)
                 except Exception as exc:
                     log(f"Error opening desktop tool from hotkey: {exc}")
     finally:
+        if converter_hotkey_registered:
+            try:
+                user32.UnregisterHotKey(None, CONVERTER_HOTKEY_ID)
+            except Exception:
+                pass
+        if background_remover_hotkey_registered:
+            try:
+                user32.UnregisterHotKey(None, BG_REMOVER_HOTKEY_ID)
+            except Exception:
+                pass
         if screenshot_hotkey_registered:
             try:
                 user32.UnregisterHotKey(None, SCREENSHOT_HOTKEY_ID)
@@ -2903,6 +2950,8 @@ def _run_screenshot_hotkey_listener():
                 user32.UnregisterHotKey(None, SCREENRECORDER_HOTKEY_ID)
             except Exception:
                 pass
+        converter_hotkey_registered = False
+        background_remover_hotkey_registered = False
         screenshot_hotkey_registered = False
         screenrecorder_hotkey_registered = False
         screenshot_hotkey_thread_id = None
@@ -3286,7 +3335,7 @@ def build_tray_menu():
         item('Tools', pystray.Menu(
             item('Video Converter', lambda icon=None, menu_item=None: tray_run_ui_action(open_converter)),
             item('BG Remover', lambda icon=None, menu_item=None: tray_run_ui_action(open_background_remover)),
-            item('YShoot', lambda icon=None, menu_item=None: tray_run_ui_action(open_screenshot_studio)),
+            item('YScreenshot', lambda icon=None, menu_item=None: tray_run_ui_action(open_screenshot_studio)),
             item('YScreenRecorder', lambda icon=None, menu_item=None: tray_run_ui_action(open_yscreenrecorder)),
         )),
         item('Help', pystray.Menu(
@@ -3344,6 +3393,8 @@ def on_close():
 # Bind minimize and close events
 root.protocol('WM_DELETE_WINDOW', on_close)
 root.bind('<Unmap>', on_minimize)  # Handle minimize button click
+root.bind_all('<Control-Shift-V>', trigger_converter)
+root.bind_all('<Control-Shift-B>', trigger_background_remover)
 root.bind_all('<Control-Shift-Y>', trigger_screenshot_studio)
 root.bind_all('<Control-Shift-R>', trigger_yscreenrecorder)
 

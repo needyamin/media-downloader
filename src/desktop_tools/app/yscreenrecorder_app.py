@@ -1,4 +1,4 @@
-"""YScreenRecorder overlay recorder with YShoot-style selection UI."""
+"""YScreenRecorder overlay recorder with YScreenshot-style selection UI."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import time
 import tkinter as tk
 from tkinter import messagebox
 
-from PIL import Image, ImageDraw, ImageGrab, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 
 try:
     import pystray
@@ -29,9 +29,11 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from desktop_tools.shared.ffmpeg import ensure_managed_ffmpeg, update_managed_ffmpeg_if_needed
+from desktop_tools.shared.capture_support import capture_desktop_snapshot, get_linux_display_name, is_linux_wayland, is_linux_x11
 from desktop_tools.shared.resources import apply_window_icon
 
 IS_WINDOWS = os.name == "nt"
+IS_LINUX = sys.platform.startswith("linux")
 WM_HOTKEY = 0x0312
 WM_QUIT = 0x0012
 MOD_CONTROL = 0x0002
@@ -78,28 +80,18 @@ def _default_recording_dir() -> Path:
 def _open_path(path: Path) -> None:
     """Open a file or folder in the system shell."""
     if sys.platform.startswith("win"):
-        os.startfile(str(path))
+        resolved_path = path.resolve()
+        try:
+            os.startfile(str(resolved_path))
+        except OSError:
+            if resolved_path.is_dir():
+                subprocess.Popen(["explorer", str(resolved_path)])
+            else:
+                subprocess.Popen(["explorer", "/select,", str(resolved_path)])
     elif sys.platform == "darwin":
         subprocess.Popen(["open", str(path)])
     else:
         subprocess.Popen(["xdg-open", str(path)])
-
-
-def _get_virtual_screen_geometry(fallback_window):
-    """Return the virtual desktop bounds for multi-monitor captures."""
-    if sys.platform.startswith("win"):
-        try:
-            user32 = ctypes.windll.user32
-            x = int(user32.GetSystemMetrics(76))
-            y = int(user32.GetSystemMetrics(77))
-            width = int(user32.GetSystemMetrics(78))
-            height = int(user32.GetSystemMetrics(79))
-            if width > 0 and height > 0:
-                return x, y, width, height
-        except Exception:
-            pass
-    return 0, 0, fallback_window.winfo_screenwidth(), fallback_window.winfo_screenheight()
-
 
 class YScreenRecorderOverlay(tk.Toplevel):
     """Overlay-based recorder with transparent area selection and bottom controls."""
@@ -114,8 +106,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         super().__init__(parent)
         self.parent_window = parent if isinstance(parent, (tk.Tk, tk.Toplevel)) else None
 
-        self.virtual_x, self.virtual_y, self.screen_width, self.screen_height = _get_virtual_screen_geometry(self)
-        self.base_image = self._capture_screen()
+        self.base_image, self.virtual_x, self.virtual_y, self.screen_width, self.screen_height = self._capture_screen()
         self.dimmed_image = Image.blend(
             self.base_image,
             Image.new("RGBA", self.base_image.size, (0, 0, 0, 255)),
@@ -147,6 +138,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self.recording_process = None
         self.recording_started_at = None
         self.recording_output_path = None
+        self.recording_backend = None
         self.recording_state = "idle"
         self.recording_region = None
         self.recording_segments = []
@@ -215,16 +207,10 @@ class YScreenRecorderOverlay(tk.Toplevel):
 
     def _capture_screen(self):
         try:
-            image = ImageGrab.grab(all_screens=True).convert("RGBA")
-        except TypeError:
-            image = ImageGrab.grab().convert("RGBA")
+            return capture_desktop_snapshot(self)
         except Exception as exc:
             self.destroy()
             raise RuntimeError(f"Could not capture the screen: {exc}") from exc
-
-        if image.size != (self.screen_width, self.screen_height):
-            image = image.resize((self.screen_width, self.screen_height), Image.LANCZOS)
-        return image
 
     def _build_hint(self):
         self.canvas.create_rectangle(20, 20, 430, 70, fill=PANEL_BG, outline=PANEL_BORDER, width=1)
@@ -441,6 +427,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self._post_stop_action = None
         self.recording_output_path = None
         self.recording_started_at = None
+        self.recording_backend = None
         if reset_timer:
             self.timer_var.set("00:00")
 
@@ -521,6 +508,8 @@ class YScreenRecorderOverlay(tk.Toplevel):
                 pass
 
     def _ensure_background_controls_available(self):
+        if not IS_WINDOWS:
+            return True
         if self._record_hotkey_registered:
             return True
         self._ensure_tray_icon()
@@ -799,6 +788,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self._discard_recording_session(reset_timer=False)
         self.timer_var.set(final_duration_text)
         self._refresh_overlay()
+        self.after(0, self.open_output_dir)
         return True
 
     def _point(self, event):
@@ -977,6 +967,176 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self.ffprobe_path = ffprobe_path
         return bool(ffmpeg_path and ffprobe_path)
 
+    def _build_capture_attempts(self, region, output_path):
+        common_output_args = [
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        if IS_WINDOWS:
+            return [
+                (
+                    "Desktop Duplication",
+                    [
+                        str(self.ffmpeg_path),
+                        "-y",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        (
+                            "ddagrab="
+                            f"framerate=30:draw_mouse=1:video_size={region['width']}x{region['height']}:"
+                            f"offset_x={region['x']}:offset_y={region['y']}"
+                        ),
+                        "-vf",
+                        "hwdownload,format=bgra,format=yuv420p",
+                        *common_output_args,
+                    ],
+                ),
+                (
+                    "GDI Capture",
+                    [
+                        str(self.ffmpeg_path),
+                        "-y",
+                        "-f",
+                        "gdigrab",
+                        "-draw_mouse",
+                        "1",
+                        "-framerate",
+                        "30",
+                        "-offset_x",
+                        str(region["x"]),
+                        "-offset_y",
+                        str(region["y"]),
+                        "-video_size",
+                        f"{region['width']}x{region['height']}",
+                        "-i",
+                        "desktop",
+                        *common_output_args,
+                    ],
+                ),
+            ]
+
+        if IS_LINUX and is_linux_x11():
+            display_name = get_linux_display_name()
+            if not display_name:
+                return []
+            return [
+                (
+                    "X11 Screen Capture",
+                    [
+                        str(self.ffmpeg_path),
+                        "-y",
+                        "-f",
+                        "x11grab",
+                        "-draw_mouse",
+                        "1",
+                        "-framerate",
+                        "30",
+                        "-video_size",
+                        f"{region['width']}x{region['height']}",
+                        "-i",
+                        f"{display_name}+{region['x']},{region['y']}",
+                        *common_output_args,
+                    ],
+                )
+            ]
+
+        return []
+
+    def _friendly_capture_error(self, error_line):
+        message = (error_line or "").strip()
+        lower_message = message.lower()
+        if not message:
+            if IS_LINUX:
+                message = "Linux blocked the recorder before FFmpeg could start."
+            else:
+                message = "Windows blocked the recorder before FFmpeg could start."
+            lower_message = message.lower()
+
+        if IS_LINUX:
+            if is_linux_wayland():
+                return (
+                    "Wayland recording is not available in YScreenRecorder yet. "
+                    "Run the app in an X11 session to use in-app recording."
+                )
+            if not get_linux_display_name():
+                return "Linux recording needs an X11 session with DISPLAY available."
+            if "cannot open display" in lower_message or "x11grab" in lower_message:
+                return (
+                    f"{message} Make sure ffmpeg includes x11grab support and that the app is running inside an X11 session."
+                )
+            return message
+
+        if "access is denied" in lower_message or "0x80070005" in lower_message or "permission denied" in lower_message:
+            return (
+                "Windows denied screen capture. If the app you want to record is running as Administrator, "
+                "run Media Downloader as Administrator too. Privacy or security software can also block capture."
+            )
+        if "protected" in lower_message or "secure desktop" in lower_message:
+            return (
+                "Windows protected that screen from capture. UAC prompts, DRM video, and some secure windows "
+                "cannot be recorded."
+            )
+        if "ddagrab" in lower_message or "desktop duplication" in lower_message or "acquirenextframe" in lower_message:
+            return (
+                f"{message} If this is a protected or elevated window, try recording a normal desktop window "
+                "or run Media Downloader with the same privileges as the target app."
+            )
+        return message
+
+    def _start_capture_process(self, region, output_path):
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        last_error_line = ""
+
+        for backend_name, ffmpeg_cmd in self._build_capture_attempts(region, output_path):
+            self._stderr_lines.clear()
+            try:
+                process = subprocess.Popen(
+                    ffmpeg_cmd,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    creationflags=creationflags,
+                )
+            except Exception as exc:
+                last_error_line = str(exc)
+                continue
+
+            time.sleep(0.45)
+            if process.poll() is None:
+                self.recording_process = process
+                self.recording_backend = backend_name
+                threading.Thread(target=self._collect_ffmpeg_output, daemon=True).start()
+                return
+
+            try:
+                _stdout, stderr_output = process.communicate(timeout=1)
+            except Exception:
+                stderr_output = ""
+
+            for line in (stderr_output or "").splitlines():
+                stripped = line.strip()
+                if stripped:
+                    self._stderr_lines.append(stripped)
+            last_error_line = next(
+                (line for line in reversed(self._stderr_lines) if line),
+                f"{backend_name} could not start recording.",
+            )
+
+        self.recording_process = None
+        self.recording_backend = None
+        raise RuntimeError(self._friendly_capture_error(last_error_line))
+
     def _run_record_hotkey_listener(self):
         if not IS_WINDOWS:
             return
@@ -1090,8 +1250,22 @@ class YScreenRecorderOverlay(tk.Toplevel):
     def start_recording(self):
         if self.recording_process is not None:
             return
-        if not IS_WINDOWS:
-            messagebox.showinfo("YScreenRecorder", "This recorder currently supports Windows desktop capture.", parent=self)
+        if not IS_WINDOWS and not IS_LINUX:
+            messagebox.showinfo("YScreenRecorder", "This recorder currently supports Windows and Linux X11 desktop capture.", parent=self)
+            return
+        if IS_LINUX and is_linux_wayland():
+            messagebox.showinfo(
+                "YScreenRecorder",
+                "Wayland recording is not available in YScreenRecorder yet.\n\nRun the app in an X11 session to use in-app recording.",
+                parent=self,
+            )
+            return
+        if IS_LINUX and not is_linux_x11():
+            messagebox.showinfo(
+                "YScreenRecorder",
+                "Linux recording currently requires an X11 session with DISPLAY available.",
+                parent=self,
+            )
             return
 
         if self.recording_state == "paused" and self.recording_region is not None:
@@ -1126,48 +1300,12 @@ class YScreenRecorderOverlay(tk.Toplevel):
 
         try:
             output_path = self._segment_output_path()
+            self._hide_recording_hud()
             self._hide_for_recording()
-            ffmpeg_cmd = [
-                str(self.ffmpeg_path),
-                "-y",
-                "-f",
-                "gdigrab",
-                "-draw_mouse",
-                "1",
-                "-framerate",
-                "30",
-                "-offset_x",
-                str(region["x"]),
-                "-offset_y",
-                str(region["y"]),
-                "-video_size",
-                f"{region['width']}x{region['height']}",
-                "-i",
-                "desktop",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
-                "-crf",
-                "23",
-                "-pix_fmt",
-                "yuv420p",
-                "-movflags",
-                "+faststart",
-                str(output_path),
-            ]
-            self._stderr_lines.clear()
-            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            self.recording_process = subprocess.Popen(
-                ffmpeg_cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-                creationflags=creationflags,
-            )
+            self._start_capture_process(region, output_path)
         except Exception as exc:
             self.recording_process = None
+            self.recording_backend = None
             self._restore_after_recording()
             messagebox.showerror("YScreenRecorder", f"Could not start recording:\n{exc}", parent=self)
             return
@@ -1176,7 +1314,6 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self.recording_started_at = time.time()
         self.recording_output_path = output_path
         self._post_stop_action = None
-        threading.Thread(target=self._collect_ffmpeg_output, daemon=True).start()
         self._update_timer_display()
         self.status_var.set("Recording is live.")
         self.summary_var.set(self._recording_controls_summary())
@@ -1310,7 +1447,10 @@ class YScreenRecorderOverlay(tk.Toplevel):
 
     def open_output_dir(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        _open_path(self.output_dir)
+        try:
+            _open_path(self.output_dir)
+        except Exception as exc:
+            messagebox.showerror("YScreenRecorder", f"Could not open the output folder:\n{exc}", parent=self)
 
     def _on_press(self, event):
         if self.recording_process is not None or self.recording_state == "paused":

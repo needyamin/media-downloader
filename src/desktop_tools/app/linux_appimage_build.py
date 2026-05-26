@@ -28,6 +28,16 @@ APPIMAGETOOL_NAME = "appimagetool-x86_64.AppImage"
 APPIMAGETOOL_URL = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
 
 
+def print_linux_runtime_guidance() -> None:
+    """Print Linux runtime notes for capture features bundled in the AppImage."""
+    print("Linux runtime notes for capture tools:")
+    print("  - YScreenRecorder currently records on Linux/X11 using system ffmpeg with x11grab support.")
+    print("  - Wayland recording is not available in-app yet and will show a guidance message instead.")
+    print("  - YScreenshot may use grim, gnome-screenshot, scrot, or ImageMagick 'import' as screenshot fallbacks.")
+    print("  - Clipboard image copy on Linux prefers wl-clipboard on Wayland or xclip on X11.")
+    print("Recommended distro packages: ffmpeg xclip wl-clipboard grim gnome-screenshot scrot imagemagick python3-tk")
+
+
 def ensure_pip_available() -> None:
     """Ensure pip exists for the current Linux Python runtime."""
     if importlib.util.find_spec("pip") is not None:
@@ -297,6 +307,7 @@ def build_appimage(appdir: Path, appimagetool_path: Path) -> Path:
 def main() -> None:
     print("Starting Linux AppImage build...")
     ensure_linux_environment()
+    print_linux_runtime_guidance()
     ensure_build_dependencies()
     clean_directories()
     icon_png = generate_linux_icon()
@@ -305,6 +316,7 @@ def main() -> None:
     appimagetool_path = ensure_appimagetool()
     output_path = build_appimage(appdir, appimagetool_path)
     print(f"Linux AppImage created: {output_path}")
+    print_linux_runtime_guidance()
 
 
 if __name__ == "__main__":
