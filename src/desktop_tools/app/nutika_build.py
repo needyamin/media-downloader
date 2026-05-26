@@ -52,6 +52,17 @@ def read_current_version() -> str:
 VERSION = read_current_version()
 
 
+def resolve_module_path(module_name: str) -> Path | None:
+    """Resolve a module file on disk when available."""
+    spec = importlib.util.find_spec(module_name)
+    if spec is None:
+        return None
+    origin = getattr(spec, "origin", None)
+    if not origin or origin in {"built-in", "frozen"}:
+        return None
+    return Path(origin).resolve()
+
+
 def ensure_python_package(module_name: str, package_name: str | None = None) -> None:
     """Install a Python package if its module is not currently available."""
     if importlib.util.find_spec(module_name) is not None:
@@ -162,6 +173,10 @@ def build_executable() -> None:
     existing_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = str(REPO_ROOT / "src") + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
     compiler_args = select_compiler_arguments()
+    onnxruntime_capi_dir = None
+    onnxruntime_capi_module = resolve_module_path("onnxruntime.capi._pybind_state")
+    if onnxruntime_capi_module is not None:
+        onnxruntime_capi_dir = onnxruntime_capi_module.parent
 
     nuitka_args = [
         sys.executable,
@@ -203,6 +218,8 @@ def build_executable() -> None:
         "--include-module=tkinter.messagebox",
         "--include-module=tkinter.filedialog",
         "--include-module=webbrowser",
+        "--include-module=onnxruntime.capi._ld_preload",
+        "--include-module=onnxruntime.capi._pybind_state",
         "--include-module=onnxruntime.capi.onnxruntime_pybind11_state",
         f"--include-data-dir={ASSETS_DIR}=assets",
         f"--include-data-files={APP_FLAGS_PATH}=app_flags.json",
@@ -220,6 +237,14 @@ def build_executable() -> None:
 
     for excluded_import in EXCLUDED_IMPORTS:
         nuitka_args.append(f"--nofollow-import-to={excluded_import}")
+
+    if onnxruntime_capi_dir is not None:
+        for dll_name in ("onnxruntime.dll", "onnxruntime_providers_shared.dll"):
+            dll_path = onnxruntime_capi_dir / dll_name
+            if dll_path.exists():
+                nuitka_args.append(
+                    f"--include-data-files={dll_path}=onnxruntime/capi/{dll_name}"
+                )
 
     try:
         print("Running Nuitka compilation...")

@@ -38,6 +38,9 @@ release/windows/*.msi
 release/windows/*.zip
 release/windows/*.7z
 release/windows/*.log
+release/windows/*.build/
+release/windows/*.dist/
+release/windows/*.onefile-build/
 release/linux/*.AppImage
 release/linux/*.png
 release/linux/appimagetool-*.AppImage

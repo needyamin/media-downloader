@@ -91,6 +91,11 @@ def get_base_path():
     """Return the app base path for source and PyInstaller builds."""
     return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 
+def is_packaged_runtime():
+    """Return True when running from a packaged executable instead of source."""
+    executable_name = Path(sys.executable).name.lower()
+    return bool(getattr(sys, "frozen", False)) and executable_name not in {"python.exe", "pythonw.exe"}
+
 def get_asset_path(*parts):
     return os.path.join(get_base_path(), "assets", *parts)
 
@@ -955,12 +960,20 @@ def ensure_background_remover_dependencies(parent=None):
         f"- {name}: {error}"
         for name, error in DEPENDENCY_ERRORS.items()
     )
-    install_hint = (
-        "Required packages are missing: "
-        f"{missing_list}\n\n"
-        "Install them with:\n"
-        "python -m pip install -r src\\desktop_tools\\app\\requirements.txt"
-    )
+    if is_packaged_runtime():
+        install_hint = (
+            "The packaged BG Remover runtime could not be loaded.\n\n"
+            f"Failed dependency import: {missing_list}\n\n"
+            "This usually means the installer build did not bundle one of rembg's nested runtime files "
+            "correctly. End users should not need to run pip inside an installed build."
+        )
+    else:
+        install_hint = (
+            "Required packages are missing: "
+            f"{missing_list}\n\n"
+            "Install them with:\n"
+            "python -m pip install -r src\\desktop_tools\\app\\requirements.txt"
+        )
     if details:
         install_hint += f"\n\nDependency load details:\n{details}"
 

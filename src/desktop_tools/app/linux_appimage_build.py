@@ -28,6 +28,32 @@ APPIMAGETOOL_NAME = "appimagetool-x86_64.AppImage"
 APPIMAGETOOL_URL = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
 
 
+def ensure_pip_available() -> None:
+    """Ensure pip exists for the current Linux Python runtime."""
+    if importlib.util.find_spec("pip") is not None:
+        return
+
+    print("Python package manager 'pip' is missing. Trying to bootstrap it...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "ensurepip", "--upgrade"],
+            check=True,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        pass
+
+    if importlib.util.find_spec("pip") is not None:
+        return
+
+    print("Python 3 pip is not installed in this Linux environment.")
+    print("On Ubuntu/WSL, install it with:")
+    print("  sudo apt update && sudo apt install -y python3-pip python3-venv python3-dev")
+    raise SystemExit(1)
+
+
 def ensure_python_package(module_name: str, package_name: str | None = None) -> None:
     """Install a required Python package if it is missing."""
     if importlib.util.find_spec(module_name) is not None:
@@ -51,6 +77,7 @@ def ensure_linux_environment() -> None:
 
 def ensure_build_dependencies() -> None:
     """Install Python-level build requirements for AppImage packaging."""
+    ensure_pip_available()
     ensure_python_package("PyInstaller", "pyinstaller")
     ensure_python_package("PIL", "pillow")
     ensure_python_package("yt_dlp", "yt-dlp")
