@@ -1,0 +1,166 @@
+name: Build and Sign Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-and-sign:
+    runs-on: windows-latest
+    env:
+      APP_DIR: src\desktop_tools\app
+      UNSIGNED_DIR: build_output\unsigned
+      FINAL_DIR: build_output\release
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+          python -m pip install -r "${env:APP_DIR}\requirements.txt"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+
+      - name: Build unsigned Windows artifacts
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --distpath "${env:APP_DIR}\dist" --workpath "${env:APP_DIR}\build\pyinstaller\work" "${env:APP_DIR}\build\pyinstaller\media_download.spec"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "${env:APP_DIR}\installer\setup.iss"
+
+      - name: Stage unsigned payload for SignPath
+        shell: pwsh
+        run: |
+          $unsignedDir = Join-Path $env:GITHUB_WORKSPACE $env:UNSIGNED_DIR
+          Remove-Item $unsignedDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $unsignedDir | Out-Null
+
+          $appExe = Join-Path $env:GITHUB_WORKSPACE "${env:APP_DIR}\dist\Media-Downloader\Media-Downloader.exe"
+          $setupExe = Join-Path $env:GITHUB_WORKSPACE "${env:APP_DIR}\installer\MediaDownloader_Setup.exe"
+
+          if (-not (Test-Path $appExe)) {
+            throw "Expected app executable not found: $appExe"
+          }
+
+          if (-not (Test-Path $setupExe)) {
+            throw "Expected installer executable not found: $setupExe"
+          }
+
+          Copy-Item $appExe (Join-Path $unsignedDir "Media-Downloader.exe") -Force
+          Copy-Item $setupExe (Join-Path $unsignedDir "MediaDownloader_Setup.exe") -Force
+
+      - name: Upload unsigned artifact
+        id: upload_unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unsigned-release
+          path: ${{ env.UNSIGNED_DIR }}
+          if-no-files-found: error
+
+      - name: Resolve SignPath configuration
+        id: signpath_config
+        shell: pwsh
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) { $missing += "SIGNPATH_API_TOKEN" }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID)) { $missing += "SIGNPATH_ORGANIZATION_ID" }
+          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_PROJECT_SLUG)) { $missing += "SIGNPATH_PROJECT_SLUG" }
+
+          if ($missing.Count -gt 0) {
+            Write-Host "SignPath not configured. Missing: $($missing -join ', ')"
+            "enabled=false" >> $env:GITHUB_OUTPUT
+            "organization_id=" >> $env:GITHUB_OUTPUT
+            "project_slug=" >> $env:GITHUB_OUTPUT
+            "signing_policy_slug=release-signing" >> $env:GITHUB_OUTPUT
+            "artifact_configuration_slug=windows-release" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          $signingPolicy = if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_SIGNING_POLICY_SLUG)) {
+            "release-signing"
+          } else {
+            $env:SIGNPATH_SIGNING_POLICY_SLUG
+          }
+
+          $artifactConfiguration = if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_ARTIFACT_CONFIGURATION_SLUG)) {
+            "windows-release"
+          } else {
+            $env:SIGNPATH_ARTIFACT_CONFIGURATION_SLUG
+          }
+
+          "enabled=true" >> $env:GITHUB_OUTPUT
+          "organization_id=$($env:SIGNPATH_ORGANIZATION_ID)" >> $env:GITHUB_OUTPUT
+          "project_slug=$($env:SIGNPATH_PROJECT_SLUG)" >> $env:GITHUB_OUTPUT
+          "signing_policy_slug=$signingPolicy" >> $env:GITHUB_OUTPUT
+          "artifact_configuration_slug=$artifactConfiguration" >> $env:GITHUB_OUTPUT
+
+      - name: Sign Windows artifacts with SignPath
+        if: steps.signpath_config.outputs.enabled == 'true'
+        uses: signpath/github-action-submit-signing-request@v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ steps.signpath_config.outputs.organization_id }}
+          project-slug: ${{ steps.signpath_config.outputs.project_slug }}
+          signing-policy-slug: ${{ steps.signpath_config.outputs.signing_policy_slug }}
+          artifact-configuration-slug: ${{ steps.signpath_config.outputs.artifact_configuration_slug }}
+          github-artifact-id: ${{ steps.upload_unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed_artifact
+
+      - name: Prepare final release payload
+        id: final_payload
+        shell: pwsh
+        env:
+          SIGNING_ENABLED: ${{ steps.signpath_config.outputs.enabled }}
+        run: |
+          $finalDir = Join-Path $env:GITHUB_WORKSPACE $env:FINAL_DIR
+          Remove-Item $finalDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $finalDir | Out-Null
+
+          if ($env:SIGNING_ENABLED -eq "true" -and (Test-Path "signed_artifact")) {
+            Copy-Item "signed_artifact\*" $finalDir -Recurse -Force
+          } else {
+            Copy-Item "${env:UNSIGNED_DIR}\*" $finalDir -Recurse -Force
+          }
+
+          "final_dir=$finalDir" >> $env:GITHUB_OUTPUT
+
+      - name: Upload final release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: ${{ steps.final_payload.outputs.final_dir }}
+          if-no-files-found: error
+
+      - name: Attach final artifacts to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.final_payload.outputs.final_dir }}/*.exe

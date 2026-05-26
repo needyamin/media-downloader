@@ -1,0 +1,11 @@
+{
+  "debug_logging": false,
+  "ui_queue_poll_ms": 150,
+  "clipboard_poll_ms_active": 1200,
+  "clipboard_poll_ms_background": 2500,
+  "clipboard_recent_limit": 10,
+  "progress_log_min_interval_ms": 1500,
+  "progress_ui_min_interval_ms": 250,
+  "max_log_lines": 400,
+  "disabled_domains": ["youtubes.com", "facebooks.com"]
+}

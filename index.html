@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Media Downloader project overview, features, architecture, build flow, runtime flags, FFmpeg management, tools, and release details.">
+  <title>Media Downloader | Project Overview</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <style>
+    :root {
+      --brand: #0d6efd;
+      --brand-dark: #0a58ca;
+      --bg-soft: #f8fafc;
+      --border-soft: #e9ecef;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background:
+        radial-gradient(circle at top right, rgba(13, 110, 253, 0.12), transparent 22%),
+        linear-gradient(180deg, #f8fbff 0%, #ffffff 24%, #f8fafc 100%);
+      color: #1f2937;
+    }
+
+    .hero {
+      padding: 5rem 0 3rem;
+    }
+
+    .hero-card,
+    .info-card,
+    .section-card {
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      box-shadow: 0 0.75rem 2rem rgba(15, 23, 42, 0.07);
+    }
+
+    .gradient-panel {
+      background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+      color: #fff;
+    }
+
+    .section-title {
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .soft-badge {
+      background: rgba(13, 110, 253, 0.08);
+      color: var(--brand-dark);
+      border: 1px solid rgba(13, 110, 253, 0.12);
+    }
+
+    .sticky-toc {
+      top: 1rem;
+    }
+
+    .icon-bullet {
+      width: 2.5rem;
+      height: 2.5rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(13, 110, 253, 0.1);
+      color: var(--brand-dark);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .feature-card,
+    .tool-card,
+    .stack-card,
+    .stat-card {
+      height: 100%;
+      border: 1px solid var(--border-soft);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .feature-card:hover,
+    .tool-card:hover,
+    .stack-card:hover,
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 1rem 2.25rem rgba(15, 23, 42, 0.08);
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .table-section th {
+      white-space: nowrap;
+    }
+
+    .footer-note {
+      color: #64748b;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="#top">Media Downloader</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="mainNav">
+        <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+          <li class="nav-item"><a class="nav-link" href="#overview">Overview</a></li>
+          <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
+          <li class="nav-item"><a class="nav-link" href="#tools">Tools</a></li>
+          <li class="nav-item"><a class="nav-link" href="#ffmpeg">FFmpeg</a></li>
+          <li class="nav-item"><a class="nav-link" href="#builds">Builds</a></li>
+          <li class="nav-item"><a class="nav-link" href="#architecture">Architecture</a></li>
+          <li class="nav-item"><a class="btn btn-primary btn-sm ms-lg-2" href="https://github.com/needyamin/media-downloader" target="_blank" rel="noreferrer">GitHub</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <header id="top" class="hero">
+    <div class="container">
+      <div class="row g-4 align-items-center">
+        <div class="col-lg-7">
+          <span class="badge rounded-pill soft-badge px-3 py-2 mb-3">Desktop media toolkit for Windows and Linux</span>
+          <h1 class="display-4 fw-bold lh-sm mb-3">A Bootstrap-powered project page for the full Media Downloader stack</h1>
+          <p class="lead text-secondary mb-4">
+            Media Downloader is a desktop application for downloading media, managing playlists, converting files, and running companion GUI tools from one organized codebase. The project is built for educational and personal use and is structured to grow into a larger desktop tools suite over time.
+          </p>
+          <div class="d-flex flex-wrap gap-2 mb-4">
+            <span class="badge text-bg-primary">Version 2.0.0</span>
+            <span class="badge text-bg-dark">MIT License</span>
+            <span class="badge text-bg-success">Windows + Linux AppImage</span>
+            <span class="badge text-bg-info">Bootstrap 5</span>
+          </div>
+          <div class="d-flex flex-wrap gap-3">
+            <a class="btn btn-primary btn-lg" href="https://github.com/needyamin/media-downloader" target="_blank" rel="noreferrer">View Repository</a>
+            <a class="btn btn-outline-primary btn-lg" href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">Download Releases</a>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <div class="card hero-card border-0 overflow-hidden">
+            <img src="https://github.com/user-attachments/assets/c4984fc3-5efb-43f4-9533-4092a2d1caaf" class="img-fluid" alt="Media Downloader application preview">
+            <div class="card-body">
+              <h2 class="h5 mb-2">Current app bundle</h2>
+              <p class="text-secondary mb-0">
+                Main downloader window, integrated <strong>Video Converter</strong>, integrated <strong>BG Remover</strong>, system tray support, and shared FFmpeg management.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="overview" class="pb-5">
+      <div class="container">
+        <div class="row g-4">
+          <div class="col-lg-8">
+            <div class="card section-card border-0">
+              <div class="card-body p-4 p-lg-5">
+                <h2 class="section-title mb-3">Project Overview</h2>
+                <p class="mb-3">
+                  The repository is centered around a Tkinter-based desktop application launched through <code>run.py</code>. The root launcher adds <code>src/</code> to the import path and runs the main GUI script at <code>src/desktop_tools/app/media_download.py</code>.
+                </p>
+                <p class="mb-3">
+                  The primary app handles media downloads using <code>yt-dlp</code>, offers quality and format controls, monitors the clipboard for media links, supports playlist downloads, integrates a system tray menu, and ships extra tools through the menu bar.
+                </p>
+                <p class="mb-0">
+                  The codebase is organized so future desktop tools can be added cleanly without turning the repository root into a large collection of unrelated scripts.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="card gradient-panel border-0 h-100">
+              <div class="card-body p-4">
+                <h2 class="h4 fw-bold mb-3">At a Glance</h2>
+                <ul class="list-unstyled mb-0">
+                  <li class="mb-3"><strong>Repository:</strong> <code>needyamin/media-downloader</code></li>
+                  <li class="mb-3"><strong>Main launcher:</strong> <code>run.py</code></li>
+                  <li class="mb-3"><strong>Main app:</strong> <code>media_download.py</code></li>
+                  <li class="mb-3"><strong>Shared modules:</strong> <code>shared/ffmpeg.py</code>, <code>shared/resources.py</code></li>
+                  <li class="mb-3"><strong>Windows release:</strong> Nuitka + Inno Setup</li>
+                  <li class="mb-0"><strong>Linux release:</strong> PyInstaller + AppImage</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-5">
+      <div class="container">
+        <div class="row g-3">
+          <div class="col-sm-6 col-xl-3">
+            <div class="card stat-card">
+              <div class="card-body">
+                <div class="text-secondary small text-uppercase mb-2">Author</div>
+                <div class="fw-semibold">Md. Yamin Hossain</div>
+                <div class="text-secondary small">Sr. Software Engineer</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="card stat-card">
+              <div class="card-body">
+                <div class="text-secondary small text-uppercase mb-2">Location</div>
+                <div class="fw-semibold">Dhaka, Bangladesh</div>
+                <div class="text-secondary small">Open-source desktop tooling</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="card stat-card">
+              <div class="card-body">
+                <div class="text-secondary small text-uppercase mb-2">License</div>
+                <div class="fw-semibold">MIT</div>
+                <div class="text-secondary small">Open and reusable</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-6 col-xl-3">
+            <div class="card stat-card">
+              <div class="card-body">
+                <div class="text-secondary small text-uppercase mb-2">Platforms</div>
+                <div class="fw-semibold">Windows + Linux</div>
+                <div class="text-secondary small">Desktop distribution ready</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="pb-5">
+      <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+          <div>
+            <h2 class="section-title mb-2">Feature Set</h2>
+            <p class="text-secondary mb-0">The core application is more than a downloader; it is a small desktop tools platform.</p>
+          </div>
+        </div>
+        <div class="row g-4">
+          <div class="col-md-6 col-xl-4">
+            <div class="card feature-card">
+              <div class="card-body">
+                <h3 class="h5">Media Downloads</h3>
+                <p class="mb-0 text-secondary">Download videos and audio from supported public sources using <code>yt-dlp</code>, including support for playlists and output format selection.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl-4">
+            <div class="card feature-card">
+              <div class="card-body">
+                <h3 class="h5">Clipboard Monitoring</h3>
+                <p class="mb-0 text-secondary">Tracks newly copied media URLs, auto-pastes the latest one, and keeps memory usage lightweight with a bounded recent history.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl-4">
+            <div class="card feature-card">
+              <div class="card-body">
+                <h3 class="h5">Quality and Format Controls</h3>
+                <p class="mb-0 text-secondary">Provides menu-based controls for video quality, audio bitrate, and output format including <code>mp4</code>, <code>webm</code>, and <code>mkv</code>.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl-4">
+            <div class="card feature-card">
+              <div class="card-body">
+                <h3 class="h5">System Tray Workflow</h3>
+                <p class="mb-0 text-secondary">Supports running in the background from the tray and mirrors major menu-bar actions through the tray menu for quick access.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl-4">
+            <div class="card feature-card">
+              <div class="card-body">
+                <h3 class="h5">Background FFmpeg Management</h3>
+                <p class="mb-0 text-secondary">Automatically finds, downloads, configures, verifies, and updates FFmpeg in the background, with visible in-app logging.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl-4">
+            <div class="card feature-card">
+              <div class="card-body">
+                <h3 class="h5">Cross-Tool Extensibility</h3>
+                <p class="mb-0 text-secondary">Separates shared helpers from tool-specific app code so new GUI modules can be added in the future with less coupling.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tools" class="pb-5">
+      <div class="container">
+        <h2 class="section-title mb-4">Included Desktop Tools</h2>
+        <div class="row g-4">
+          <div class="col-lg-4">
+            <div class="card tool-card h-100">
+              <div class="card-body">
+                <span class="badge soft-badge mb-3">Main Window</span>
+                <h3 class="h4">Media Downloader</h3>
+                <p class="text-secondary">The primary application for entering URLs, selecting download preferences, monitoring progress, and viewing logs.</p>
+                <ul class="mb-0">
+                  <li>Runs from <code>src/desktop_tools/app/media_download.py</code></li>
+                  <li>Launches through <code>run.py</code></li>
+                  <li>Owns the main menu, tray, status bar, and download workflow</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="card tool-card h-100">
+              <div class="card-body">
+                <span class="badge soft-badge mb-3">Integrated Tool</span>
+                <h3 class="h4">Video Converter</h3>
+                <p class="text-secondary">Opened from the menu bar and uses the shared managed FFmpeg runtime rather than bundling its own separate installation.</p>
+                <ul class="mb-0">
+                  <li>Exposed through <code>Tools -&gt; Video Converter</code></li>
+                  <li>Implemented in <code>converter_app.py</code></li>
+                  <li>Uses background FFmpeg preparation for a non-blocking UI</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="card tool-card h-100">
+              <div class="card-body">
+                <span class="badge soft-badge mb-3">Integrated Tool</span>
+                <h3 class="h4">BG Remover</h3>
+                <p class="text-secondary">A second GUI tool integrated into the same desktop experience, opened directly from the downloader menu bar.</p>
+                <ul class="mb-0">
+                  <li>Exposed through <code>Tools -&gt; BG Remover</code></li>
+                  <li>Implemented in <code>background_remover_app.py</code></li>
+                  <li>Uses the same shared project structure and asset pipeline</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="ffmpeg" class="pb-5">
+      <div class="container">
+        <div class="row g-4 align-items-start">
+          <div class="col-lg-7">
+            <div class="card section-card border-0">
+              <div class="card-body p-4 p-lg-5">
+                <h2 class="section-title mb-4">FFmpeg Lifecycle and Logging</h2>
+                <div class="d-flex gap-3 mb-4">
+                  <div class="icon-bullet">1</div>
+                  <div>
+                    <h3 class="h5">Automatic startup check</h3>
+                    <p class="mb-0 text-secondary">When the GUI opens, the app starts an FFmpeg background sync automatically instead of blocking the interface.</p>
+                  </div>
+                </div>
+                <div class="d-flex gap-3 mb-4">
+                  <div class="icon-bullet">2</div>
+                  <div>
+                    <h3 class="h5">Search existing installs</h3>
+                    <p class="mb-0 text-secondary">The shared module checks the managed install directory and expected local system paths before downloading anything.</p>
+                  </div>
+                </div>
+                <div class="d-flex gap-3 mb-4">
+                  <div class="icon-bullet">3</div>
+                  <div>
+                    <h3 class="h5">Download if missing</h3>
+                    <p class="mb-0 text-secondary">If no working FFmpeg binary is found, the app downloads an FFmpeg package automatically, extracts it, copies the executables into the managed directory, and verifies them.</p>
+                  </div>
+                </div>
+                <div class="d-flex gap-3 mb-4">
+                  <div class="icon-bullet">4</div>
+                  <div>
+                    <h3 class="h5">Track release metadata</h3>
+                    <p class="mb-0 text-secondary">The shared module records install details and release tags so later update checks can determine whether a newer FFmpeg version is available.</p>
+                  </div>
+                </div>
+                <div class="d-flex gap-3">
+                  <div class="icon-bullet">5</div>
+                  <div>
+                    <h3 class="h5">Visible logging</h3>
+                    <p class="mb-0 text-secondary">FFmpeg logs are intentionally shown in the normal in-app log, even when global debug logging is disabled, so users can see what is happening.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-5">
+            <div class="card info-card h-100">
+              <div class="card-body p-4">
+                <h3 class="h4 mb-3">FFmpeg Sources and Controls</h3>
+                <ul class="mb-4">
+                  <li>Shared module: <code>src/desktop_tools/shared/ffmpeg.py</code></li>
+                  <li>Managed install location: <code>%LOCALAPPDATA%\Media Downloader\ffmpeg</code></li>
+                  <li>Metadata file: <code>ffmpeg_metadata.json</code></li>
+                  <li>Manual menu action: <code>Settings -&gt; Install / Update FFmpeg</code></li>
+                </ul>
+                <h4 class="h6 text-uppercase text-secondary mb-2">Typical visible messages</h4>
+                <pre class="bg-dark text-light rounded p-3 small mb-0">[FFmpeg] Automatic FFmpeg startup check started.
+[FFmpeg] Searching for an existing FFmpeg installation...
+[FFmpeg] Checking FFmpeg path: ...
+[FFmpeg] FFmpeg not found. Starting automatic download...
+[FFmpeg] Downloading FFmpeg...
+[FFmpeg] Extracting FFmpeg files...
+[FFmpeg] FFmpeg configured successfully: ...
+[FFmpeg] FFmpeg is ready for downloads.</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="usage" class="pb-5">
+      <div class="container">
+        <h2 class="section-title mb-4">User Flow</h2>
+        <div class="card section-card border-0">
+          <div class="card-body p-4 p-lg-5">
+            <div class="row g-4">
+              <div class="col-md-6 col-xl-3">
+                <h3 class="h6 text-uppercase text-secondary">Step 1</h3>
+                <p class="mb-0">Launch the app through <code>python run.py</code> or a packaged executable.</p>
+              </div>
+              <div class="col-md-6 col-xl-3">
+                <h3 class="h6 text-uppercase text-secondary">Step 2</h3>
+                <p class="mb-0">Paste a supported media URL manually or let the clipboard watcher populate the latest copied link.</p>
+              </div>
+              <div class="col-md-6 col-xl-3">
+                <h3 class="h6 text-uppercase text-secondary">Step 3</h3>
+                <p class="mb-0">Choose video quality, audio bitrate, format, destination folder, and playlist behavior from the UI and menus.</p>
+              </div>
+              <div class="col-md-6 col-xl-3">
+                <h3 class="h6 text-uppercase text-secondary">Step 4</h3>
+                <p class="mb-0">Use the same app window, the tray menu, or the integrated companion tools as needed while FFmpeg remains shared.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="runtime" class="pb-5">
+      <div class="container">
+        <h2 class="section-title mb-4">Runtime Flags</h2>
+        <div class="card section-card border-0 table-section">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Flag</th>
+                    <th>Current Default / Example</th>
+                    <th>Purpose</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>debug_logging</code></td>
+                    <td><code>false</code></td>
+                    <td>Controls extra internal debug logging. FFmpeg activity remains visible even when this is off.</td>
+                  </tr>
+                  <tr>
+                    <td><code>ui_queue_poll_ms</code></td>
+                    <td><code>150</code></td>
+                    <td>Sets the UI queue polling interval used for thread-safe GUI updates.</td>
+                  </tr>
+                  <tr>
+                    <td><code>clipboard_poll_ms_active</code></td>
+                    <td><code>1200</code></td>
+                    <td>Polling interval for clipboard checks while the app is active.</td>
+                  </tr>
+                  <tr>
+                    <td><code>clipboard_poll_ms_background</code></td>
+                    <td><code>2500</code></td>
+                    <td>Polling interval for clipboard checks while the app is backgrounded.</td>
+                  </tr>
+                  <tr>
+                    <td><code>clipboard_recent_limit</code></td>
+                    <td><code>10</code></td>
+                    <td>Limits remembered clipboard URLs to keep the app lightweight.</td>
+                  </tr>
+                  <tr>
+                    <td><code>progress_log_min_interval_ms</code></td>
+                    <td><code>1500</code></td>
+                    <td>Minimum interval for progress log updates.</td>
+                  </tr>
+                  <tr>
+                    <td><code>progress_ui_min_interval_ms</code></td>
+                    <td><code>250</code></td>
+                    <td>Minimum interval for progress UI refreshes.</td>
+                  </tr>
+                  <tr>
+                    <td><code>max_log_lines</code></td>
+                    <td><code>400</code></td>
+                    <td>Keeps the visible log bounded in memory.</td>
+                  </tr>
+                  <tr>
+                    <td><code>disabled_domains</code></td>
+                    <td><code>["youtubes.com", "facebooks.com"]</code></td>
+                    <td>Domain blocklist applied even if <code>yt-dlp</code> could otherwise support those sites.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="builds" class="pb-5">
+      <div class="container">
+        <h2 class="section-title mb-4">Build, Packaging, and Release Flow</h2>
+        <div class="row g-4">
+          <div class="col-lg-6">
+            <div class="card section-card border-0 h-100">
+              <div class="card-body p-4">
+                <h3 class="h4">Windows Build Pipeline</h3>
+                <p class="text-secondary">The Windows release flow compiles the application with Nuitka and then builds an Inno Setup installer.</p>
+                <ul>
+                  <li>Main script: <code>src/desktop_tools/app/nutika_build.py</code></li>
+                  <li>Wrapper script: <code>src/desktop_tools/app/build_installer.bat</code></li>
+                  <li>Installer script: <code>src/desktop_tools/app/installer/setup.iss</code></li>
+                  <li>Output directory: <code>release/windows</code></li>
+                </ul>
+                <h4 class="h6 text-uppercase text-secondary mb-2">Windows command</h4>
+                <pre class="bg-dark text-light rounded p-3 mb-0">python "src\desktop_tools\app\nutika_build.py"</pre>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="card section-card border-0 h-100">
+              <div class="card-body p-4">
+                <h3 class="h4">Linux AppImage Pipeline</h3>
+                <p class="text-secondary">The Linux flow creates a PyInstaller onedir bundle and wraps it into an AppImage.</p>
+                <ul>
+                  <li>Main script: <code>src/desktop_tools/app/linux_appimage_build.py</code></li>
+                  <li>Shell wrapper: <code>src/desktop_tools/app/build_linux_appimage.sh</code></li>
+                  <li>Output directory: <code>release/linux</code></li>
+                  <li>Generated artifact: <code>Media-Downloader-x86_64.AppImage</code></li>
+                </ul>
+                <h4 class="h6 text-uppercase text-secondary mb-2">Linux commands</h4>
+                <pre class="bg-dark text-light rounded p-3 mb-0">python3 "src/desktop_tools/app/linux_appimage_build.py"
+./src/desktop_tools/app/build_linux_appimage.sh</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="signing" class="pb-5">
+      <div class="container">
+        <div class="card section-card border-0">
+          <div class="card-body p-4 p-lg-5">
+            <h2 class="section-title mb-3">Windows Signing and SmartScreen Strategy</h2>
+            <p class="mb-3">
+              To reduce SmartScreen and unknown-publisher warnings for this open-source project, the repository includes support for optional signing through SignPath Foundation.
+            </p>
+            <ul class="mb-3">
+              <li>Workflow file: <code>.github/workflows/windows-signpath.yml</code></li>
+              <li>Artifact config: <code>.signpath/artifact-configurations/windows-release.xml</code></li>
+              <li>Targets: <code>Media-Downloader.exe</code> and <code>MediaDownloader_Setup.exe</code></li>
+            </ul>
+            <p class="mb-0 text-secondary">
+              If signing is configured, the release pipeline signs the Windows artifacts. If it is not configured yet, the build can still produce unsigned artifacts so the release process remains usable.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture" class="pb-5">
+      <div class="container">
+        <div class="row g-4">
+          <div class="col-lg-4">
+            <div class="card section-card border-0 sticky-lg-top sticky-toc">
+              <div class="card-body p-4">
+                <h2 class="h4 mb-3">Key Files</h2>
+                <ul class="mb-0 small">
+                  <li><code>run.py</code> - root launcher</li>
+                  <li><code>README.md</code> - text documentation</li>
+                  <li><code>app_flags.json</code> - runtime tuning</li>
+                  <li><code>media_download.py</code> - main GUI and download logic</li>
+                  <li><code>converter_app.py</code> - integrated video converter</li>
+                  <li><code>background_remover_app.py</code> - integrated remover tool</li>
+                  <li><code>shared/ffmpeg.py</code> - FFmpeg management</li>
+                  <li><code>shared/resources.py</code> - asset and window helpers</li>
+                  <li><code>nutika_build.py</code> - Windows packaging</li>
+                  <li><code>linux_appimage_build.py</code> - Linux packaging</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-8">
+            <div class="card section-card border-0 mb-4">
+              <div class="card-body p-4 p-lg-5">
+                <h2 class="section-title mb-3">Repository Layout</h2>
+                <pre class="bg-dark text-light rounded p-3 mb-0">media-downloader/
+|- README.md
+|- LICENSE
+|- run.py
+|- app_flags.json
+|- index.html
+|- release/
+|  |- windows/
+|  `- linux/
+`- src/
+   `- desktop_tools/
+      |- app/
+      |  |- media_download.py
+      |  |- converter_app.py
+      |  |- background_remover_app.py
+      |  |- requirements.txt
+      |  |- nutika_build.py
+      |  |- linux_appimage_build.py
+      |  |- build_installer.bat
+      |  |- build_linux_appimage.sh
+      |  `- installer/
+      `- shared/
+         |- ffmpeg.py
+         `- resources.py</pre>
+              </div>
+            </div>
+            <div class="card section-card border-0">
+              <div class="card-body p-4 p-lg-5">
+                <h2 class="section-title mb-3">Design Notes</h2>
+                <ul class="mb-0">
+                  <li>The root stays minimal so the project is easier to maintain and extend.</li>
+                  <li>Shared modules centralize cross-tool logic such as FFmpeg handling, path detection, icon loading, and window centering.</li>
+                  <li>Tool-specific code lives under <code>src/desktop_tools/app/</code> so future GUI modules can be added without heavy refactors.</li>
+                  <li>Release artifacts are separated under <code>release/windows</code> and <code>release/linux</code>.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="dependencies" class="pb-5">
+      <div class="container">
+        <h2 class="section-title mb-4">Dependencies and Stack</h2>
+        <div class="row g-4 mb-4">
+          <div class="col-md-6 col-xl-3">
+            <div class="card stack-card">
+              <div class="card-body">
+                <h3 class="h5">GUI</h3>
+                <p class="mb-0 text-secondary">Tkinter for the main application and windowing, with CustomTkinter used for the background remover experience.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl-3">
+            <div class="card stack-card">
+              <div class="card-body">
+                <h3 class="h5">Media Engine</h3>
+                <p class="mb-0 text-secondary"><code>yt-dlp</code> for download extraction and FFmpeg for post-processing, conversion, and media operations.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl-3">
+            <div class="card stack-card">
+              <div class="card-body">
+                <h3 class="h5">System Integration</h3>
+                <p class="mb-0 text-secondary"><code>pystray</code> for tray behavior, <code>pyperclip</code> for clipboard monitoring, and Windows-only helpers through <code>pywin32</code>.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6 col-xl-3">
+            <div class="card stack-card">
+              <div class="card-body">
+                <h3 class="h5">Packaging</h3>
+                <p class="mb-0 text-secondary">Nuitka and Inno Setup for Windows, PyInstaller and AppImage tooling for Linux distribution.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card section-card border-0 table-section">
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-striped align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Dependency</th>
+                    <th>Role</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td><code>yt-dlp</code></td><td>Media downloading engine</td></tr>
+                  <tr><td><code>pillow</code></td><td>Image processing and icon handling</td></tr>
+                  <tr><td><code>pyperclip</code></td><td>Clipboard operations</td></tr>
+                  <tr><td><code>pystray</code></td><td>System tray integration</td></tr>
+                  <tr><td><code>pywin32</code></td><td>Windows-specific APIs</td></tr>
+                  <tr><td><code>validators</code></td><td>URL validation</td></tr>
+                  <tr><td><code>requests</code></td><td>HTTP and API requests</td></tr>
+                  <tr><td><code>certifi</code></td><td>SSL certificate bundle</td></tr>
+                  <tr><td><code>customtkinter</code></td><td>Enhanced UI for the remover tool</td></tr>
+                  <tr><td><code>rembg</code></td><td>Background removal engine</td></tr>
+                  <tr><td><code>onnxruntime</code></td><td>Inference backend used by rembg</td></tr>
+                  <tr><td><code>pyinstaller</code></td><td>Linux AppImage build flow</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="compliance" class="pb-5">
+      <div class="container">
+        <div class="row g-4">
+          <div class="col-lg-6">
+            <div class="card section-card border-0 h-100">
+              <div class="card-body p-4">
+                <h2 class="h4 mb-3">Legal Notice</h2>
+                <p class="mb-3">
+                  This software is provided for educational and personal use only. Users are responsible for ensuring they comply with applicable laws and platform terms of service when using the application.
+                </p>
+                <p class="mb-0 text-danger fw-semibold">
+                  Do not use this software to access or download content in violation of any terms of service or applicable laws.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="card section-card border-0 h-100">
+              <div class="card-body p-4">
+                <h2 class="h4 mb-3">License Summary</h2>
+                <p class="mb-3">
+                  The project is licensed under the MIT License. This allows use, copy, modification, merge, publication, distribution, sublicense, and sale, subject to inclusion of the copyright and license notice.
+                </p>
+                <p class="mb-0 text-secondary">
+                  The software is provided "as is" without warranty of any kind, including merchantability, fitness for a particular purpose, and noninfringement.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="links" class="pb-5">
+      <div class="container">
+        <div class="card section-card border-0">
+          <div class="card-body p-4 p-lg-5">
+            <h2 class="section-title mb-4">Project Links</h2>
+            <div class="row g-3">
+              <div class="col-md-6 col-xl-3"><a class="btn btn-outline-primary w-100" href="https://github.com/needyamin/media-downloader" target="_blank" rel="noreferrer">GitHub Repository</a></div>
+              <div class="col-md-6 col-xl-3"><a class="btn btn-outline-primary w-100" href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">GitHub Releases</a></div>
+              <div class="col-md-6 col-xl-3"><a class="btn btn-outline-primary w-100" href="https://needyamin.github.io" target="_blank" rel="noreferrer">Author Website</a></div>
+              <div class="col-md-6 col-xl-3"><a class="btn btn-outline-primary w-100" href="https://github.com/needyamin/media-downloader/issues" target="_blank" rel="noreferrer">Issue Tracker</a></div>
+            </div>
+            <div class="mt-4 footer-note">
+              Additional author links present in the app profile include GitHub, website, ORCID, and Facebook.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-top py-4 bg-white">
+    <div class="container d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
+      <div>
+        <div class="fw-semibold">Media Downloader</div>
+        <div class="footer-note">Open-source desktop media toolkit with integrated tools and shared FFmpeg management.</div>
+      </div>
+      <div class="text-lg-end footer-note">
+        Built with Bootstrap 5 for project presentation.<br>
+        Project version documented here: <strong>2.0.0</strong>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

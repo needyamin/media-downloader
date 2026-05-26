@@ -3,10 +3,14 @@ yt-dlp>=2025.3.31       # Media download engine
 pillow>=10.0.0          # Image processing
 pyperclip>=1.8.2        # Clipboard operations
 pystray>=0.19.4         # System tray icon
-pywin32>=306            # Windows API integration
+pywin32>=306; platform_system=="Windows"  # Windows-only APIs
 validators>=0.22.0      # URL validation
 requests>=2.31.0        # HTTP requests
 certifi>=2023.7.22      # SSL certificates
+customtkinter>=5.2.0    # Background remover UI
+rembg>=2.0.0            # Background removal engine
+onnxruntime>=1.15.0     # rembg inference backend
+pyinstaller>=6.0.0      # Linux AppImage build flow
 
 # Platform-specific requirements (auto-installed)
 # - tkinter (Python built-in)

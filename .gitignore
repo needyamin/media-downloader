@@ -1,0 +1,55 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments and local env files
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# Tooling and test caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+pip-wheel-metadata/
+*.egg-info/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated build outputs
+src/desktop_tools/app/build/nuitka/
+src/desktop_tools/app/dist/
+
+# Generated release artifacts
+release/windows/*.exe
+release/windows/*.msi
+release/windows/*.zip
+release/windows/*.7z
+release/windows/*.log
+release/linux/*.AppImage
+release/linux/*.png
+release/linux/appimagetool-*.AppImage
+release/linux/pyinstaller-dist/
+release/linux/pyinstaller-work/
+release/linux/*.AppDir/
+
+# Generated reports and temporary files
+nuitka-crash-report.xml
+*.tmp
+*.bak
+*.part
+*.part.json
+*.ytdl
+*.temp

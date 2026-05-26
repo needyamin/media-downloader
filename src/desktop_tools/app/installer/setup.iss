@@ -1,11 +1,10 @@
 #define MyAppName "Media Downloader"
-#define MyAppVersion "1.0.15"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "Md Yamin Hossain"
 #define MyAppURL "https://github.com/needyamin/media-downloader"
 #define MyAppExeName "Media-Downloader.exe"
 
 [Setup]
-; Basic setup parameters
 AppId={{EE7A0919-7BE4-4A6D-AB0A-DBD30A51C5B4}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -16,17 +15,13 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-; Compression settings
 Compression=lzma
 SolidCompression=yes
-; Visuals and UI
-SetupIconFile=needyamin.ico
-UninstallDisplayIcon={app}\needyamin.ico
+SetupIconFile=..\assets\needyamin.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 WizardStyle=modern
-; Output settings
-OutputDir=installer
+OutputDir=..\..\..\..\release\windows
 OutputBaseFilename=MediaDownloader_Setup
-; Privileges
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
@@ -39,12 +34,8 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 Name: "startupicon"; Description: "{cm:StartupDescription}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; Main executable (corrected path for PyInstaller --onedir output)
-Source: "dist\Media-Downloader\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-; Icon file
-Source: "needyamin.ico"; DestDir: "{app}"; Flags: ignoreversion
-; Add all other files from the PyInstaller output folder
-Source: "dist\Media-Downloader\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\..\..\..\release\windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\assets\needyamin.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -56,11 +47,7 @@ Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Fil
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-; Add registry keys for auto-start (optional)
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Media Downloader"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startupicon
 
 [CustomMessages]
 StartupDescription=Start {#MyAppName} when Windows starts
-
-[Code]
-// Custom code for the installer can be added here 

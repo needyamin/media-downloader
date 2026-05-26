@@ -1,3 +1,0 @@
-Open Terminal, Current Directory Run:
-
-pyinstaller --clean media-download.spec
