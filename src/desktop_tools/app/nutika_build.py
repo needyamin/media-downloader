@@ -203,6 +203,7 @@ def build_executable() -> None:
         "--include-module=desktop_tools.app.converter_app",
         "--include-module=desktop_tools.app.background_remover_app",
         "--include-module=desktop_tools.app.screenshot_app",
+        "--include-module=desktop_tools.app.yscreenrecorder_app",
         "--include-module=tkinter",
         "--include-module=tkinter.ttk",
         "--include-module=tkinter.messagebox",

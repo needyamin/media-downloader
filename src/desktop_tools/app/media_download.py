@@ -48,6 +48,8 @@ MOD_SHIFT = 0x0004
 MOD_NOREPEAT = 0x4000
 SCREENSHOT_HOTKEY_ID = 0x594D
 SCREENSHOT_HOTKEY_LABEL = "Ctrl+Shift+Y"
+SCREENRECORDER_HOTKEY_ID = 0x5952
+SCREENRECORDER_HOTKEY_LABEL = "Ctrl+Shift+R"
 
 try:
     from desktop_tools.shared.resources import apply_window_icon, center_window, get_asset_path, get_project_root, get_user_data_dir
@@ -1498,6 +1500,24 @@ def trigger_screenshot_studio(event=None):
     if event is not None:
         return "break"
 
+def open_yscreenrecorder():
+    """Open YScreenRecorder from the downloader menu bar."""
+    try:
+        from desktop_tools.app.yscreenrecorder_app import open_yscreenrecorder as launch_yscreenrecorder
+
+        recorder_window = launch_yscreenrecorder(root)
+        if recorder_window is not None:
+            log("Opened YScreenRecorder")
+    except Exception as e:
+        log(f"Error opening YScreenRecorder: {e}")
+        messagebox.showerror("YScreenRecorder Error", f"Could not open YScreenRecorder:\n{e}")
+
+def trigger_yscreenrecorder(event=None):
+    """Open YScreenRecorder from the GUI or keyboard shortcut."""
+    open_yscreenrecorder()
+    if event is not None:
+        return "break"
+
 def persist_max_files_value(event=None):
     """Normalize and save the playlist max-files value."""
     sanitized_value = current_max_files_value()
@@ -2450,6 +2470,7 @@ menubar.add_cascade(label="Tools", menu=tools_menu)
 tools_menu.add_command(label="Video Converter", command=open_converter)
 tools_menu.add_command(label="BG Remover", command=open_background_remover)
 tools_menu.add_command(label="YShoot", accelerator=SCREENSHOT_HOTKEY_LABEL, command=open_screenshot_studio)
+tools_menu.add_command(label="YScreenRecorder", accelerator=SCREENRECORDER_HOTKEY_LABEL, command=open_yscreenrecorder)
 
 # Help Menu
 help_menu = tk.Menu(menubar, tearoff=0)
@@ -2823,10 +2844,11 @@ tray_thread = None
 screenshot_hotkey_thread = None
 screenshot_hotkey_thread_id = None
 screenshot_hotkey_registered = False
+screenrecorder_hotkey_registered = False
 
 def _run_screenshot_hotkey_listener():
     """Listen for the global screenshot hotkey while the app is in the background."""
-    global screenshot_hotkey_thread_id, screenshot_hotkey_registered
+    global screenshot_hotkey_thread_id, screenshot_hotkey_registered, screenrecorder_hotkey_registered
 
     if not IS_WINDOWS:
         return
@@ -2838,30 +2860,51 @@ def _run_screenshot_hotkey_listener():
     message = wintypes.MSG()
 
     try:
-        if not user32.RegisterHotKey(None, SCREENSHOT_HOTKEY_ID, modifiers, ord('Y')):
+        screenshot_registered = bool(user32.RegisterHotKey(None, SCREENSHOT_HOTKEY_ID, modifiers, ord('Y')))
+        if not screenshot_registered:
             log(f"Global screenshot hotkey unavailable: {SCREENSHOT_HOTKEY_LABEL}")
+
+        recorder_registered = bool(user32.RegisterHotKey(None, SCREENRECORDER_HOTKEY_ID, modifiers, ord('R')))
+        if not recorder_registered:
+            log(f"Global screen recorder hotkey unavailable: {SCREENRECORDER_HOTKEY_LABEL}")
+
+        if not screenshot_registered and not recorder_registered:
             return
 
-        screenshot_hotkey_registered = True
-        log(f"Global screenshot hotkey ready: {SCREENSHOT_HOTKEY_LABEL}")
+        screenshot_hotkey_registered = screenshot_registered
+        screenrecorder_hotkey_registered = recorder_registered
+        if screenshot_registered:
+            log(f"Global screenshot hotkey ready: {SCREENSHOT_HOTKEY_LABEL}")
+        if recorder_registered:
+            log(f"Global screen recorder hotkey ready: {SCREENRECORDER_HOTKEY_LABEL}")
 
         while True:
             result = user32.GetMessageW(ctypes.byref(message), None, 0, 0)
             if result in (0, -1):
                 break
 
-            if message.message == WM_HOTKEY and int(message.wParam) == SCREENSHOT_HOTKEY_ID:
+            if message.message == WM_HOTKEY:
                 try:
-                    root.after(0, trigger_screenshot_studio)
+                    hotkey_id = int(message.wParam)
+                    if hotkey_id == SCREENSHOT_HOTKEY_ID:
+                        root.after(0, trigger_screenshot_studio)
+                    elif hotkey_id == SCREENRECORDER_HOTKEY_ID:
+                        root.after(0, trigger_yscreenrecorder)
                 except Exception as exc:
-                    log(f"Error opening screenshot studio from hotkey: {exc}")
+                    log(f"Error opening desktop tool from hotkey: {exc}")
     finally:
         if screenshot_hotkey_registered:
             try:
                 user32.UnregisterHotKey(None, SCREENSHOT_HOTKEY_ID)
             except Exception:
                 pass
+        if screenrecorder_hotkey_registered:
+            try:
+                user32.UnregisterHotKey(None, SCREENRECORDER_HOTKEY_ID)
+            except Exception:
+                pass
         screenshot_hotkey_registered = False
+        screenrecorder_hotkey_registered = False
         screenshot_hotkey_thread_id = None
 
 def start_screenshot_hotkey_listener():
@@ -3244,6 +3287,7 @@ def build_tray_menu():
             item('Video Converter', lambda icon=None, menu_item=None: tray_run_ui_action(open_converter)),
             item('BG Remover', lambda icon=None, menu_item=None: tray_run_ui_action(open_background_remover)),
             item('YShoot', lambda icon=None, menu_item=None: tray_run_ui_action(open_screenshot_studio)),
+            item('YScreenRecorder', lambda icon=None, menu_item=None: tray_run_ui_action(open_yscreenrecorder)),
         )),
         item('Help', pystray.Menu(
             item('About Us', lambda icon=None, menu_item=None: tray_run_ui_action(show_about_window)),
@@ -3301,6 +3345,7 @@ def on_close():
 root.protocol('WM_DELETE_WINDOW', on_close)
 root.bind('<Unmap>', on_minimize)  # Handle minimize button click
 root.bind_all('<Control-Shift-Y>', trigger_screenshot_studio)
+root.bind_all('<Control-Shift-R>', trigger_yscreenrecorder)
 
 # Start tray icon
 create_tray_icon()
