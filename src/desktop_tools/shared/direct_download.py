@@ -182,6 +182,7 @@ class DirectDownloadTask:
         progress_callback=None,
         state_callback=None,
         chunk_size: int = 256 * 1024,
+        delete_partial_on_cancel: bool = False,
     ) -> None:
         self.url = str(url).strip()
         self.output_dir = Path(output_dir)
@@ -189,6 +190,7 @@ class DirectDownloadTask:
         self.progress_callback = progress_callback
         self.state_callback = state_callback
         self.chunk_size = chunk_size
+        self.delete_partial_on_cancel = bool(delete_partial_on_cancel)
 
         self.thread: threading.Thread | None = None
         self.pause_requested = threading.Event()
@@ -337,8 +339,10 @@ class DirectDownloadTask:
             self._write_resume_metadata(
                 {
                     "url": self.url,
+                    "final_url": probe.final_url,
                     "final_name": final_path.name,
                     "filename": probe.filename,
+                    "content_type": probe.content_type,
                     "total_size": total_size,
                     "supports_resume": probe.supports_resume,
                 }
@@ -352,7 +356,8 @@ class DirectDownloadTask:
             with open(part_path, file_mode) as output_file:
                 for chunk in response.iter_content(chunk_size=self.chunk_size):
                     if self.cancel_requested.is_set():
-                        self._cleanup_cancelled_files()
+                        if self.delete_partial_on_cancel:
+                            self._cleanup_cancelled_files()
                         self._set_state("cancelled")
                         self._report_progress(0.0, "Direct download cancelled")
                         return

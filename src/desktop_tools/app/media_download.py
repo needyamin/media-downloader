@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, BooleanVar, filedialog
+from tkinter import ttk, messagebox, BooleanVar, filedialog, simpledialog
 import os
 from collections import deque
 import yt_dlp
@@ -66,6 +66,7 @@ try:
         verify_ffmpeg_binaries,
     )
     from desktop_tools.shared.direct_download import DirectDownloadError, DirectDownloadTask
+    from desktop_tools.shared.direct_download_manager import DirectDownloadManager
 except Exception:
     def apply_window_icon(window, app_id="needyamin.media_downloader"):
         return APP_DIR / "assets" / "needyamin.ico"
@@ -106,6 +107,46 @@ except Exception:
 
         def cancel(self):
             return None
+
+    class DirectDownloadManager:
+        def __init__(self, *args, **kwargs):
+            self.error_message = "Direct download manager is unavailable."
+
+        def get_records(self):
+            return []
+
+        def get_record(self, record_id):
+            return None
+
+        def get_active_record(self):
+            return None
+
+        def has_active_download(self):
+            return False
+
+        def queue_download(self, url):
+            raise DirectDownloadError(self.error_message)
+
+        def resume_record(self, record_id):
+            return False
+
+        def pause_record(self, record_id):
+            return False
+
+        def cancel_record(self, record_id):
+            return False
+
+        def replace_record_url(self, record_id, new_url):
+            return False
+
+        def delete_record(self, record_id, delete_files=False):
+            return False
+
+        def clear_finished(self, delete_files=False):
+            return 0
+
+        def start_next_download(self):
+            return False
 
     def verify_ffmpeg_binaries(ffmpeg_path, ffprobe_path, logger=None):
         return False
@@ -293,6 +334,7 @@ ICON_PATH = get_asset_path("needyamin.ico")
 # Installation directory (using AppData by default for better compatibility)
 INSTALL_DIR = get_user_data_dir("Media Downloader")
 INSTALL_DIR.mkdir(parents=True, exist_ok=True)
+DIRECT_DOWNLOAD_HISTORY_FILE = INSTALL_DIR / "direct_download_history.json"
 
 # Persistent settings and output directories
 DEFAULT_DOWNLOADS_PATH = Path.home() / "Downloads" / "Yamin Downloader"
@@ -788,6 +830,232 @@ def show_error_dialog(title, summary, details="", suggestion=""):
     ).pack(side='right')
 
     error_dialog_window.after_idle(lambda: center_window(error_dialog_window, root))
+
+
+def focus_url_entry(select_existing=False):
+    """Bring focus back to the main URL field."""
+    try:
+        root.deiconify()
+    except Exception:
+        pass
+
+    try:
+        root.lift()
+        root.focus_force()
+    except Exception:
+        pass
+
+    if 'url_entry' not in globals():
+        return
+
+    try:
+        url_entry.focus_set()
+        if select_existing:
+            url_entry.selection_range(0, tk.END)
+        url_entry.icursor(tk.END)
+    except Exception:
+        pass
+
+
+def close_url_dialog_and_focus():
+    """Close the active dialog and move the user back to the URL field."""
+    close_error_dialog()
+    focus_url_entry(select_existing=True)
+
+
+def paste_clipboard_into_url_entry():
+    """Paste the clipboard into the main URL field when possible."""
+    clipboard_text = ""
+    try:
+        clipboard_text = pyperclip.paste().strip()
+    except Exception:
+        clipboard_text = ""
+
+    if 'url_entry' in globals() and clipboard_text:
+        try:
+            url_entry.delete(0, tk.END)
+            url_entry.insert(0, clipboard_text)
+        except Exception:
+            pass
+
+    close_url_dialog_and_focus()
+
+
+def show_url_validation_dialog(current_text=""):
+    """Show a styled URL guidance dialog instead of a plain warning popup."""
+    global error_dialog_window
+
+    if error_dialog_window and error_dialog_window.winfo_exists():
+        error_dialog_window.destroy()
+
+    current_text = str(current_text or "").strip()
+    is_invalid = bool(current_text)
+    title = "Paste a Media URL" if not is_invalid else "Check the URL Format"
+    summary = (
+        "Add a video or audio link to start the download."
+        if not is_invalid
+        else "The text in the URL box is not a complete web link yet."
+    )
+    helper_text = (
+        "Copy a full media page link from your browser, then paste it into the main URL field."
+        if not is_invalid
+        else "A valid media link must begin with http:// or https:// before the downloader can use it."
+    )
+    details_text = (
+        "The URL field is currently empty."
+        if not is_invalid
+        else f"Current text:\n{current_text}"
+    )
+
+    error_dialog_window = tk.Toplevel(root)
+    error_dialog_window.title(title)
+    error_dialog_window.geometry("620x360")
+    error_dialog_window.minsize(560, 320)
+    error_dialog_window.configure(bg=THEME['bg'])
+    error_dialog_window.transient(root)
+    error_dialog_window.protocol("WM_DELETE_WINDOW", close_error_dialog)
+    apply_window_icon(error_dialog_window, app_id="needyamin.media_downloader")
+
+    outer = tk.Frame(error_dialog_window, bg=THEME['bg'])
+    outer.pack(fill='both', expand=True, padx=20, pady=20)
+
+    header_card = tk.Frame(outer, bg='#EEF6FF', bd=1, relief='solid')
+    header_card.pack(fill='x', pady=(0, 14))
+
+    icon_box = tk.Label(
+        header_card,
+        text="URL",
+        font=('Segoe UI', 11, 'bold'),
+        bg=THEME['secondary'],
+        fg='white',
+        padx=14,
+        pady=12,
+    )
+    icon_box.pack(side='left', padx=18, pady=18)
+
+    header_text = tk.Frame(header_card, bg='#EEF6FF')
+    header_text.pack(fill='both', expand=True, padx=(0, 18), pady=18)
+
+    tk.Label(
+        header_text,
+        text=title,
+        font=('Segoe UI', 16, 'bold'),
+        bg='#EEF6FF',
+        fg=THEME['secondary'],
+        anchor='w',
+    ).pack(anchor='w')
+
+    tk.Label(
+        header_text,
+        text=summary,
+        font=('Segoe UI', 10),
+        bg='#EEF6FF',
+        fg=THEME['fg'],
+        anchor='w',
+        justify='left',
+        wraplength=440,
+    ).pack(anchor='w', pady=(6, 0))
+
+    body_card = tk.Frame(outer, bg='white', bd=1, relief='solid')
+    body_card.pack(fill='both', expand=True)
+
+    tk.Label(
+        body_card,
+        text="What to do",
+        font=('Segoe UI', 11, 'bold'),
+        bg='white',
+        fg=THEME['fg'],
+        anchor='w',
+    ).pack(anchor='w', padx=18, pady=(16, 6))
+
+    tk.Label(
+        body_card,
+        text=helper_text,
+        font=('Segoe UI', 10),
+        bg='white',
+        fg=THEME['gray'],
+        justify='left',
+        wraplength=560,
+    ).pack(anchor='w', padx=18)
+
+    detail_card = tk.Frame(body_card, bg=THEME['light_gray'], bd=1, relief='solid')
+    detail_card.pack(fill='x', padx=18, pady=14)
+
+    tk.Label(
+        detail_card,
+        text=details_text,
+        font=('Segoe UI', 10),
+        bg=THEME['light_gray'],
+        fg=THEME['fg'],
+        justify='left',
+        anchor='w',
+        padx=12,
+        pady=12,
+        wraplength=530,
+    ).pack(fill='x')
+
+    tk.Label(
+        body_card,
+        text="Example: https://www.youtube.com/watch?v=example",
+        font=('Consolas', 10),
+        bg='white',
+        fg=THEME['secondary'],
+        anchor='w',
+    ).pack(anchor='w', padx=18, pady=(0, 16))
+
+    button_row = tk.Frame(outer, bg=THEME['bg'])
+    button_row.pack(fill='x')
+
+    tk.Button(
+        button_row,
+        text="Paste Clipboard",
+        bg=THEME['light_gray'],
+        fg=THEME['fg'],
+        activebackground=THEME['border'],
+        activeforeground=THEME['fg'],
+        relief='flat',
+        cursor='hand2',
+        padx=16,
+        pady=7,
+        command=paste_clipboard_into_url_entry,
+    ).pack(side='left')
+
+    tk.Button(
+        button_row,
+        text="Go to URL Box",
+        bg=THEME['primary'],
+        fg='white',
+        activebackground=THEME['secondary'],
+        activeforeground='white',
+        relief='flat',
+        cursor='hand2',
+        padx=16,
+        pady=7,
+        command=close_url_dialog_and_focus,
+    ).pack(side='right')
+
+    error_dialog_window.after_idle(lambda: center_window(error_dialog_window, root))
+
+
+def show_url_validation_dialog_threadsafe(current_text=""):
+    """Show the styled URL guidance dialog from any thread."""
+    if threading.current_thread() is threading.main_thread():
+        show_url_validation_dialog(current_text)
+    elif 'ui_queue' in globals():
+        ui_queue.put(lambda text=current_text: show_url_validation_dialog(text))
+
+
+def validate_main_download_url():
+    """Validate the main URL box before starting a site download."""
+    url = url_entry.get().strip() if 'url_entry' in globals() else ""
+    if not url:
+        show_url_validation_dialog("")
+        return None
+    if not url.startswith(('http://', 'https://')):
+        log(f"URL validation failed: {url}")
+        show_url_validation_dialog(url)
+        return None
+    return url
 
 def show_debug_update_window(debug_data, report_text):
     """Show a richer UI for update diagnostics."""
@@ -1583,15 +1851,75 @@ def is_site_download_running():
     """Return True when a yt-dlp download thread is active."""
     return current_download_thread is not None and current_download_thread.is_alive()
 
+def get_direct_download_manager():
+    """Return the shared IDM-style direct download manager."""
+    return direct_download_manager
+
+def get_active_direct_record():
+    """Return the currently active direct-download record, if any."""
+    manager = get_direct_download_manager()
+    if manager is None:
+        return None
+    return manager.get_active_record()
+
+def get_direct_download_record(record_id):
+    """Return a direct-download record by ID."""
+    manager = get_direct_download_manager()
+    if manager is None:
+        return None
+    return manager.get_record(record_id)
+
 def direct_download_state():
-    """Return the current direct-download task state."""
-    if direct_download_task is None:
+    """Return the current active direct-download state."""
+    active_record = get_active_direct_record()
+    if active_record is None:
         return "idle"
-    return getattr(direct_download_task, "state", "idle")
+    return getattr(active_record, "state", "idle")
 
 def is_direct_download_active():
     """Return True when a direct download is downloading or paused."""
     return direct_download_state() in {"probing", "downloading", "paused"}
+
+def format_download_size(byte_count):
+    """Return a compact human-readable size string."""
+    try:
+        value = float(byte_count or 0)
+    except Exception:
+        value = 0.0
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_index = 0
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024.0
+        unit_index += 1
+    if unit_index == 0:
+        return f"{int(value)} {units[unit_index]}"
+    return f"{value:.1f} {units[unit_index]}"
+
+def format_download_percent(record):
+    """Return the progress percent for a download record."""
+    if record is None:
+        return "0%"
+    try:
+        return f"{record.progress_percent:.1f}%"
+    except Exception:
+        return "0%"
+
+def format_download_progress_text(record):
+    """Return a compact progress summary for a download record."""
+    if record is None:
+        return "0 B"
+    if getattr(record, "total_size", 0):
+        return f"{format_download_size(record.downloaded_bytes)} / {format_download_size(record.total_size)}"
+    return format_download_size(getattr(record, "downloaded_bytes", 0))
+
+def format_download_timestamp(timestamp_value):
+    """Format a unix timestamp for display in the download list."""
+    try:
+        if not timestamp_value:
+            return "-"
+        return datetime.fromtimestamp(float(timestamp_value)).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return "-"
 
 def show_action_button(widget):
     """Show an action button using its stored layout options."""
@@ -1688,6 +2016,9 @@ def enable_buttons():
             hide_action_button(cancel_btn)
         if not is_site_download_running() and not is_direct_download_active():
             show_progress_section(None)
+        manager = get_direct_download_manager()
+        if manager is not None:
+            manager.start_next_download()
         refresh_action_rows()
     except Exception:
         pass
@@ -1702,7 +2033,7 @@ def disable_buttons():
             audio_btn.config(state='disabled')
             show_action_button(audio_btn)
         if 'direct_btn' in globals():
-            direct_btn.config(state='disabled')
+            direct_btn.config(state='normal')
             show_action_button(direct_btn)
         if 'pause_resume_btn' in globals():
             hide_action_button(pause_resume_btn)
@@ -1723,7 +2054,7 @@ def update_direct_download_controls():
             if 'audio_btn' in globals():
                 audio_btn.config(state='disabled')
             if 'direct_btn' in globals():
-                direct_btn.config(state='disabled')
+                direct_btn.config(state='normal')
             if 'pause_resume_btn' in globals():
                 pause_resume_btn.config(state='normal', text="⏸ Pause Direct")
                 show_action_button(pause_resume_btn)
@@ -1736,7 +2067,7 @@ def update_direct_download_controls():
             if 'audio_btn' in globals():
                 audio_btn.config(state='disabled')
             if 'direct_btn' in globals():
-                direct_btn.config(state='disabled')
+                direct_btn.config(state='normal')
             if 'pause_resume_btn' in globals():
                 pause_resume_btn.config(state='normal', text="▶ Resume Direct")
                 show_action_button(pause_resume_btn)
@@ -1754,133 +2085,508 @@ def direct_download_log(message):
     """Log direct-download messages with a dedicated prefix."""
     log(f"[Direct] {message}")
 
-def direct_download_progress(percent, message):
-    """Marshal direct-download progress updates back to Tk."""
+def initialize_direct_download_manager():
+    """Create the persistent direct-download manager once."""
+    global direct_download_manager
+    if direct_download_manager is None:
+        direct_download_manager = DirectDownloadManager(
+            output_dir=direct_output_dir,
+            storage_path=DIRECT_DOWNLOAD_HISTORY_FILE,
+            log_callback=direct_download_log,
+            can_start_downloads=lambda: not is_site_download_running(),
+            on_change=handle_direct_download_manager_change,
+            on_active_progress=handle_direct_download_manager_change,
+        )
+    return direct_download_manager
+
+def get_direct_download_message(record):
+    """Return the status text for the current direct download record."""
+    if record is None:
+        return "Download list idle"
+    if getattr(record, "last_message", ""):
+        return record.last_message
+    title = record.final_name or record.filename or "Direct download"
+    return f"{title}: {record.state.title()}"
+
+def sync_direct_download_progress(record=None):
+    """Update the main direct-download progress widgets from the manager."""
+    active_record = record or get_active_direct_record()
+    if active_record is None:
+        update_direct_progress(0, "Download list idle")
+        return
+    update_direct_progress(active_record.progress_percent, get_direct_download_message(active_record))
+
+def handle_direct_download_manager_change(record=None):
+    """Refresh direct-download UI after queue/history changes."""
     def _apply():
         try:
-            show_progress_section("direct")
-            if percent is not None:
-                direct_progress['value'] = max(0, min(100, float(percent)))
-            direct_progress_label.config(text=message)
-            status_label.config(text=message)
+            sync_direct_download_progress(record)
+            update_direct_download_controls()
+            if 'download_list_window' in globals() and download_list_window is not None:
+                refresh_download_list_window()
+            if record is not None and getattr(record, 'state', '') == 'completed' and getattr(record, 'final_path', ''):
+                try:
+                    open_path_in_file_manager(Path(record.final_path).parent)
+                except Exception as exc:
+                    log(f"Error opening direct-download folder: {exc}")
+            elif record is not None and getattr(record, 'state', '') == 'error':
+                show_error_dialog(
+                    "Direct Download Error",
+                    "The direct file download could not be completed.",
+                    details=str(getattr(record, 'error_message', '') or "Unknown direct download error"),
+                    suggestion=(
+                        "Use a normal file/media URL for direct downloads. For video pages and streaming sites, use "
+                        "the Video or Audio download buttons instead."
+                    ),
+                )
         except Exception as exc:
-            log(f"Error updating direct download progress: {exc}")
+            log(f"Error refreshing direct download manager UI: {exc}")
 
-    ui_queue.put(_apply)
+    if threading.current_thread() is threading.main_thread():
+        _apply()
+    else:
+        ui_queue.put(_apply)
 
-def handle_direct_download_state_change(state, payload=None):
-    """Handle direct-download lifecycle events on the Tk thread."""
-    global direct_download_task
-
-    def _apply():
-        global direct_download_task
-        update_direct_download_controls()
-
-        if state == "completed":
-            final_path = Path(payload) if payload else direct_output_dir
-            direct_download_task = None
-            update_direct_progress(100, f"Direct download complete: {final_path.name}")
-            enable_buttons()
-            try:
-                open_path_in_file_manager(final_path.parent)
-            except Exception as exc:
-                log(f"Error opening direct-download folder: {exc}")
-        elif state == "cancelled":
-            direct_download_task = None
-            update_direct_progress(0, "Direct download cancelled")
-            enable_buttons()
-        elif state == "paused":
-            update_direct_progress(direct_progress['value'], "Direct download paused")
-        elif state == "error":
-            error_details = str(payload or "Unknown direct download error")
-            direct_download_task = None
-            show_error_dialog(
-                "Direct Download Error",
-                "The direct file download could not be completed.",
-                details=error_details,
-                suggestion=(
-                    "Use a normal file/media URL for direct downloads. For video pages and streaming sites, use "
-                    "the Video or Audio download buttons instead."
-                ),
-            )
-            update_direct_progress(0, "Direct file download idle")
-            enable_buttons()
-
-    ui_queue.put(_apply)
-
-def start_direct_download():
-    """Start a direct file download in the same main window."""
-    global direct_download_task
-
-    if is_site_download_running():
-        messagebox.showinfo("Download Busy", "A site download is already running. Please wait for it to finish first.")
-        return
-
-    if direct_download_task is not None and direct_download_state() == "paused":
-        toggle_direct_pause_resume()
-        return
-
-    if direct_download_task is not None and direct_download_task.is_busy():
-        messagebox.showinfo("Download Busy", "A direct download is already running.")
-        return
-
-    url = url_entry.get().strip()
-    if not url:
-        messagebox.showerror("Error", "Please enter a direct file URL")
-        return
-
-    if not url.startswith(('http://', 'https://')):
-        messagebox.showerror("Error", "Please enter a valid URL starting with http:// or https://")
-        return
-
-    blocked_domain = get_disabled_domain_match(url)
+def validate_direct_download_url(url):
+    """Validate a direct-download URL and return the normalized value."""
+    cleaned_url = str(url or "").strip()
+    if not cleaned_url:
+        raise DirectDownloadError("Please enter a direct file URL.")
+    if not cleaned_url.startswith(("http://", "https://")):
+        raise DirectDownloadError("Please enter a valid URL starting with http:// or https://")
+    blocked_domain = get_disabled_domain_match(cleaned_url)
     if blocked_domain:
+        raise DirectDownloadError(f"Blocked domain match: {blocked_domain}\nURL: {cleaned_url}")
+    return cleaned_url
+
+def queue_direct_download_url(url, *, open_window=False):
+    """Queue a direct-download URL into the IDM-style download list."""
+    manager = initialize_direct_download_manager()
+    try:
+        cleaned_url = validate_direct_download_url(url)
+    except DirectDownloadError as exc:
         show_error_dialog(
-            "Download Blocked",
-            "This domain is disabled in the application settings.",
-            details=f"Blocked domain match: {blocked_domain}\nURL: {url}",
-            suggestion="Remove the domain from app_flags.json -> disabled_domains to allow it again.",
+            "Direct Download Error",
+            "The direct file download could not be added.",
+            details=str(exc),
+            suggestion="Use a normal file/media URL here. For video pages and streaming sites, use the Video or Audio buttons instead.",
         )
-        return
+        return None
 
     if not verify_output_directories():
         messagebox.showerror("Error", "Failed to prepare output directories for direct downloads.")
-        return
+        return None
 
-    direct_download_task = DirectDownloadTask(
-        url=url,
-        output_dir=direct_output_dir,
-        log_callback=direct_download_log,
-        progress_callback=direct_download_progress,
-        state_callback=handle_direct_download_state_change,
-    )
-
-    direct_download_task.state = "probing"
-    update_direct_progress(0, "Preparing direct download...")
-    update_direct_download_controls()
     try:
-        direct_download_task.start()
+        record = manager.queue_download(cleaned_url)
     except Exception as exc:
-        direct_download_task = None
         show_error_dialog(
             "Direct Download Error",
-            "The direct file download could not be started.",
+            "The direct file download could not be added.",
             details=str(exc),
             suggestion="Try another direct media/file URL, or use the Video or Audio buttons for site downloads.",
         )
+        return None
+
+    update_direct_progress(0, "Added direct file to the download list.")
+    if open_window:
+        open_download_list_window(select_record_id=record.id)
+    return record
+
+def queue_direct_download_from_entry(*, open_window=False):
+    """Queue the current main-URL entry into the download list."""
+    return queue_direct_download_url(url_entry.get().strip(), open_window=open_window)
+
+def start_direct_download():
+    """Open the IDM-style direct-download list window."""
+    open_download_list_window()
 
 def toggle_direct_pause_resume():
-    """Pause or resume the current direct download."""
-    if direct_download_task is None:
+    """Pause or resume the current direct download from the main window."""
+    manager = initialize_direct_download_manager()
+    active_record = get_active_direct_record()
+    if active_record is None:
         return
+    if active_record.state == "downloading":
+        manager.pause_record(active_record.id)
+    elif active_record.state == "paused":
+        update_direct_progress(active_record.progress_percent, "Resuming direct download...")
+        manager.resume_record(active_record.id)
 
-    state = direct_download_state()
-    if state == "downloading":
-        direct_download_task.pause()
-    elif state == "paused":
-        update_direct_progress(direct_progress['value'], "Resuming direct download...")
-        direct_download_task.resume()
-        update_direct_download_controls()
+def get_selected_download_record_id():
+    """Return the selected download-list record ID."""
+    if 'download_list_tree' not in globals() or download_list_tree is None:
+        return None
+    selection = download_list_tree.selection()
+    if not selection:
+        return None
+    return str(selection[0])
+
+def get_selected_download_record():
+    """Return the selected download-list record object."""
+    record_id = get_selected_download_record_id()
+    if not record_id:
+        return None
+    return get_direct_download_record(record_id)
+
+def friendly_download_name(record):
+    """Return a user-friendly title for a download record."""
+    if record is None:
+        return ""
+    return record.final_name or record.filename or Path(urlparse(record.url).path).name or record.url
+
+def build_download_details_text(record):
+    """Build the details text for the selected download-list item."""
+    if record is None:
+        return "Select a download item to view details and actions."
+    details = [
+        f"Name: {friendly_download_name(record)}",
+        f"Status: {record.state.title()}",
+        f"Progress: {format_download_percent(record)} ({format_download_progress_text(record)})",
+        f"Added: {format_download_timestamp(record.added_at)}",
+        f"Updated: {format_download_timestamp(record.updated_at)}",
+        f"URL: {record.url}",
+    ]
+    if record.final_path:
+        details.append(f"File: {record.final_path}")
+    elif record.part_path:
+        details.append(f"Partial file: {record.part_path}")
+    if record.error_message:
+        details.append(f"Error: {record.error_message}")
+    elif record.last_message:
+        details.append(f"Message: {record.last_message}")
+    return "\n".join(details)
+
+def update_download_list_action_states():
+    """Enable or disable download-list buttons based on the current selection."""
+    record = get_selected_download_record()
+    selection_exists = record is not None
+    active_busy = selection_exists and record.id == getattr(get_direct_download_manager(), "active_record_id", None) and record.state in {"probing", "downloading"}
+
+    button_states = {
+        'download_list_resume_btn': 'normal' if selection_exists and record.state in {"queued", "paused", "cancelled", "error"} else 'disabled',
+        'download_list_pause_btn': 'normal' if active_busy else 'disabled',
+        'download_list_cancel_btn': 'normal' if selection_exists and record.state in {"queued", "probing", "downloading", "paused"} else 'disabled',
+        'download_list_replace_btn': 'normal' if selection_exists and record.state != "completed" else 'disabled',
+        'download_list_open_file_btn': 'normal' if selection_exists and record.final_path and Path(record.final_path).exists() else 'disabled',
+        'download_list_open_folder_btn': 'normal' if selection_exists else 'disabled',
+        'download_list_delete_btn': 'normal' if selection_exists else 'disabled',
+    }
+    for widget_name, state in button_states.items():
+        if widget_name in globals() and globals()[widget_name] is not None:
+            globals()[widget_name].config(state=state)
+
+def on_download_list_selection_change(event=None):
+    """Refresh details when the selected download-list item changes."""
+    record = get_selected_download_record()
+    if 'download_list_details_var' in globals() and download_list_details_var is not None:
+        download_list_details_var.set(build_download_details_text(record))
+    update_download_list_action_states()
+
+def select_download_record(record_id):
+    """Select a download-list item by record ID if it exists."""
+    if not record_id or 'download_list_tree' not in globals() or download_list_tree is None:
+        return
+    if not download_list_tree.exists(record_id):
+        return
+    download_list_tree.selection_set(record_id)
+    download_list_tree.focus(record_id)
+    download_list_tree.see(record_id)
+    on_download_list_selection_change()
+
+def refresh_download_list_window():
+    """Refresh the IDM-style download list window contents."""
+    if 'download_list_window' not in globals() or download_list_window is None or not download_list_window.winfo_exists():
+        return
+    manager = initialize_direct_download_manager()
+    previous_selection = get_selected_download_record_id()
+    download_list_tree.delete(*download_list_tree.get_children())
+
+    for record in manager.get_records():
+        download_list_tree.insert(
+            "",
+            "end",
+            iid=record.id,
+            values=(
+                record.state.title(),
+                friendly_download_name(record),
+                format_download_percent(record),
+                format_download_progress_text(record),
+                format_download_timestamp(record.updated_at),
+            ),
+        )
+
+    if previous_selection and download_list_tree.exists(previous_selection):
+        select_download_record(previous_selection)
+    elif download_list_tree.get_children():
+        select_download_record(download_list_tree.get_children()[0])
+    else:
+        if 'download_list_details_var' in globals() and download_list_details_var is not None:
+            download_list_details_var.set(build_download_details_text(None))
+        update_download_list_action_states()
+
+def add_current_url_to_download_list():
+    """Add the current main-URL field into the direct download list."""
+    record = queue_direct_download_from_entry(open_window=True)
+    if record is not None:
+        url_entry.delete(0, tk.END)
+
+def prompt_add_url_to_download_list():
+    """Prompt the user for a direct-download URL and add it to the list."""
+    initial_url = url_entry.get().strip() if 'url_entry' in globals() else ""
+    entered_url = simpledialog.askstring(
+        "Add Direct Download",
+        "Enter a direct file or media URL:",
+        parent=download_list_window if 'download_list_window' in globals() and download_list_window is not None else root,
+        initialvalue=initial_url,
+    )
+    if entered_url:
+        queue_direct_download_url(entered_url, open_window=True)
+
+def resume_selected_download_record():
+    """Resume or start the selected direct-download record."""
+    record = get_selected_download_record()
+    if record is None:
+        return
+    initialize_direct_download_manager().resume_record(record.id)
+
+def pause_selected_download_record():
+    """Pause the selected active direct download."""
+    record = get_selected_download_record()
+    if record is None:
+        return
+    initialize_direct_download_manager().pause_record(record.id)
+
+def cancel_selected_download_record():
+    """Cancel the selected direct-download item while keeping it in history."""
+    record = get_selected_download_record()
+    if record is None:
+        return
+    initialize_direct_download_manager().cancel_record(record.id)
+
+def replace_selected_download_link():
+    """Replace the URL for a failed or paused direct download."""
+    record = get_selected_download_record()
+    if record is None:
+        return
+    replacement_url = simpledialog.askstring(
+        "Replace Download Link",
+        "Enter a new direct file URL for this item:",
+        parent=download_list_window if 'download_list_window' in globals() and download_list_window is not None else root,
+        initialvalue=record.url,
+    )
+    if not replacement_url:
+        return
+    try:
+        cleaned_url = validate_direct_download_url(replacement_url)
+    except DirectDownloadError as exc:
+        show_error_dialog(
+            "Replace Link Error",
+            "The new direct link is not valid.",
+            details=str(exc),
+            suggestion="Enter a direct media/file URL beginning with http:// or https://.",
+        )
+        return
+    initialize_direct_download_manager().replace_record_url(record.id, cleaned_url)
+
+def open_selected_download_file():
+    """Open the completed file for the selected direct-download item."""
+    record = get_selected_download_record()
+    if record is None or not record.final_path:
+        return
+    target_path = Path(record.final_path)
+    if not target_path.exists():
+        messagebox.showinfo("File Missing", "The downloaded file could not be found on disk.")
+        return
+    open_path_in_file_manager(target_path)
+
+def open_selected_download_folder():
+    """Open the containing folder for the selected direct-download item."""
+    record = get_selected_download_record()
+    if record is None:
+        return
+    target_path = Path(record.final_path).parent if record.final_path else direct_output_dir
+    open_path_in_file_manager(target_path)
+
+def delete_selected_download_record():
+    """Delete the selected direct-download history row, optionally removing files."""
+    record = get_selected_download_record()
+    if record is None:
+        return
+    if record.id == getattr(get_direct_download_manager(), "active_record_id", None) and record.state in {"probing", "downloading"}:
+        messagebox.showinfo("Download Busy", "Cancel or pause the active direct download before deleting it.")
+        return
+    choice = messagebox.askyesnocancel(
+        "Delete Download Record",
+        "Do you want to delete the selected download from the list?\n\nYes = Delete record and files\nNo = Delete record only\nCancel = Keep it",
+        parent=download_list_window if 'download_list_window' in globals() and download_list_window is not None else root,
+    )
+    if choice is None:
+        return
+    initialize_direct_download_manager().delete_record(record.id, delete_files=bool(choice))
+
+def clear_finished_download_records():
+    """Clear completed, cancelled, and failed items from the download list."""
+    manager = initialize_direct_download_manager()
+    choice = messagebox.askyesnocancel(
+        "Clear Finished Items",
+        "Clear completed, cancelled, and failed downloads from the list?\n\nYes = Clear records and files\nNo = Clear records only\nCancel = Keep everything",
+        parent=download_list_window if 'download_list_window' in globals() and download_list_window is not None else root,
+    )
+    if choice is None:
+        return
+    removed = manager.clear_finished(delete_files=bool(choice))
+    if removed:
+        log(f"Cleared {removed} direct download history item(s).")
+
+def close_download_list_window():
+    """Close the download list window without losing persisted history."""
+    global download_list_window
+    if download_list_window is not None and download_list_window.winfo_exists():
+        download_list_window.destroy()
+    download_list_window = None
+
+def open_download_list_window(select_record_id=None):
+    """Open the IDM-style direct download list window."""
+    global download_list_window, download_list_tree, download_list_details_var
+    global download_list_resume_btn, download_list_pause_btn, download_list_cancel_btn
+    global download_list_replace_btn, download_list_open_file_btn, download_list_open_folder_btn, download_list_delete_btn
+
+    initialize_direct_download_manager()
+    if download_list_window is not None and download_list_window.winfo_exists():
+        download_list_window.deiconify()
+        download_list_window.lift()
+        download_list_window.focus_force()
+        refresh_download_list_window()
+        if select_record_id:
+            download_list_window.after(0, lambda item_id=select_record_id: select_download_record(item_id))
+        return download_list_window
+
+    download_list_window = tk.Toplevel(root)
+    download_list_window.title("Download List")
+    download_list_window.configure(bg=THEME['bg'])
+    download_list_window.geometry("1080x620")
+    download_list_window.minsize(920, 520)
+    apply_window_icon(download_list_window, app_id="needyamin.media_downloader")
+    download_list_window.protocol("WM_DELETE_WINDOW", close_download_list_window)
+    download_list_window.grid_rowconfigure(1, weight=1)
+    download_list_window.grid_columnconfigure(0, weight=1)
+
+    def make_download_list_button(parent, text, command, *, bg, fg="white", active_bg=None, disabled_fg="#E2E8F0"):
+        button = tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=bg,
+            fg=fg,
+            activebackground=active_bg or bg,
+            activeforeground=fg,
+            disabledforeground=disabled_fg,
+            font=('Segoe UI', 10, 'bold'),
+            relief='flat',
+            bd=0,
+            cursor='hand2',
+            padx=14,
+            pady=8,
+            highlightthickness=0,
+        )
+        return button
+
+    header = tk.Frame(download_list_window, bg=THEME['bg'])
+    header.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 10))
+    header.grid_columnconfigure(0, weight=1)
+
+    tk.Label(
+        header,
+        text="Download List",
+        font=('Segoe UI', 14, 'bold'),
+        bg=THEME['bg'],
+        fg=THEME['fg'],
+    ).grid(row=0, column=0, sticky="w")
+
+    tk.Label(
+        header,
+        text="Queue direct downloads, resume them later, replace broken links, and manage completed history.",
+        font=('Segoe UI', 9),
+        bg=THEME['bg'],
+        fg=THEME['gray'],
+    ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+    actions = tk.Frame(download_list_window, bg=THEME['bg'])
+    actions.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
+    actions.grid_rowconfigure(2, weight=1)
+    actions.grid_columnconfigure(0, weight=1)
+
+    top_buttons = tk.Frame(actions, bg=THEME['bg'])
+    top_buttons.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+
+    make_download_list_button(top_buttons, "Add Current URL", add_current_url_to_download_list, bg='#16A34A', active_bg='#15803D').pack(side='left', padx=(0, 8))
+    make_download_list_button(top_buttons, "Add URL", prompt_add_url_to_download_list, bg='#2563EB', active_bg='#1D4ED8').pack(side='left', padx=(0, 8))
+
+    download_list_resume_btn = make_download_list_button(top_buttons, "Start / Resume", resume_selected_download_record, bg='#0EA5E9', active_bg='#0284C7')
+    download_list_resume_btn.pack(side='left', padx=(0, 8))
+    download_list_pause_btn = make_download_list_button(top_buttons, "Pause", pause_selected_download_record, bg='#D97706', active_bg='#B45309')
+    download_list_pause_btn.pack(side='left', padx=(0, 8))
+    download_list_cancel_btn = make_download_list_button(top_buttons, "Cancel", cancel_selected_download_record, bg='#DC2626', active_bg='#B91C1C')
+    download_list_cancel_btn.pack(side='left', padx=(0, 8))
+    download_list_replace_btn = make_download_list_button(top_buttons, "Replace Link", replace_selected_download_link, bg='#7C3AED', active_bg='#6D28D9')
+    download_list_replace_btn.pack(side='left')
+
+    lower_buttons = tk.Frame(actions, bg=THEME['bg'])
+    lower_buttons.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+
+    download_list_open_file_btn = make_download_list_button(lower_buttons, "Open File", open_selected_download_file, bg='#334155', active_bg='#1E293B')
+    download_list_open_file_btn.pack(side='left', padx=(0, 8))
+    download_list_open_folder_btn = make_download_list_button(lower_buttons, "Open Folder", open_selected_download_folder, bg='#475569', active_bg='#334155')
+    download_list_open_folder_btn.pack(side='left', padx=(0, 8))
+    download_list_delete_btn = make_download_list_button(lower_buttons, "Delete", delete_selected_download_record, bg='#92400E', active_bg='#78350F')
+    download_list_delete_btn.pack(side='left', padx=(0, 8))
+    make_download_list_button(lower_buttons, "Clear Finished", clear_finished_download_records, bg='#64748B', active_bg='#475569').pack(side='left', padx=(0, 8))
+    make_download_list_button(lower_buttons, "Refresh", refresh_download_list_window, bg='#0F766E', active_bg='#0F5F59').pack(side='left')
+
+    tree_frame = tk.Frame(actions, bg=THEME['bg'])
+    tree_frame.grid(row=2, column=0, sticky="nsew")
+    tree_frame.grid_rowconfigure(0, weight=1)
+    tree_frame.grid_columnconfigure(0, weight=1)
+
+    columns = ("status", "name", "progress", "size", "updated")
+    download_list_tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse")
+    download_list_tree.heading("status", text="Status")
+    download_list_tree.heading("name", text="Name")
+    download_list_tree.heading("progress", text="Progress")
+    download_list_tree.heading("size", text="Size")
+    download_list_tree.heading("updated", text="Updated")
+    download_list_tree.column("status", width=120, anchor="w")
+    download_list_tree.column("name", width=360, anchor="w")
+    download_list_tree.column("progress", width=110, anchor="center")
+    download_list_tree.column("size", width=180, anchor="center")
+    download_list_tree.column("updated", width=160, anchor="center")
+    download_list_tree.grid(row=0, column=0, sticky="nsew")
+    download_list_tree.bind("<<TreeviewSelect>>", on_download_list_selection_change)
+
+    tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=download_list_tree.yview)
+    tree_scroll.grid(row=0, column=1, sticky="ns")
+    download_list_tree.configure(yscrollcommand=tree_scroll.set)
+
+    download_list_details_var = tk.StringVar(value="Select a download item to view details and actions.")
+    tk.Label(
+        actions,
+        textvariable=download_list_details_var,
+        justify='left',
+        anchor='w',
+        bg=THEME['light_gray'],
+        fg=THEME['fg'],
+        relief='flat',
+        padx=10,
+        pady=10,
+        wraplength=980,
+    ).grid(row=3, column=0, sticky="ew", pady=(12, 0))
+
+    refresh_download_list_window()
+    if select_record_id:
+        download_list_window.after(0, lambda item_id=select_record_id: select_download_record(item_id))
+    download_list_window.after_idle(lambda: center_window(download_list_window, root))
+    return download_list_window
 
 def threaded_download(is_audio):
     """Start the existing yt-dlp downloader in a separate thread."""
@@ -1890,12 +2596,16 @@ def threaded_download(is_audio):
         messagebox.showinfo("Download Busy", "A direct download is already active. Pause or cancel it first.")
         return
 
+    validated_url = validate_main_download_url()
+    if not validated_url:
+        return
+
     disable_buttons()
 
     def download_thread():
         global current_download_thread
         try:
-            download_media(is_audio)
+            download_media(is_audio, validated_url)
         finally:
             ui_queue.put(enable_buttons)
             current_download_thread = None
@@ -3004,7 +3714,7 @@ playlist_check.grid(row=0, column=0, sticky="w", padx=(0, 20))
 
 tk.Label(
     left_options,
-    text="Use Direct Download for normal media/file links with pause and resume support.",
+    text="Use Download List for direct file links with queue, resume, history, and broken-link replacement.",
     font=('Segoe UI', 9),
     bg=THEME['bg'],
     fg=THEME['gray']
@@ -3077,7 +3787,7 @@ audio_btn.grid(**audio_btn._grid_kwargs)
 
 direct_btn = tk.Button(
     primary_actions_row,
-    text="📥 Direct Download (IDM)",
+    text="📋 Download List",
     bg='#4CAF50',
     fg='white',
     activebackground='#424242',
@@ -3087,7 +3797,7 @@ direct_btn = tk.Button(
     cursor='hand2',
     padx=20,
     pady=8,
-    command=start_direct_download
+    command=open_download_list_window
 )
 direct_btn._grid_kwargs = {"row": 0, "column": 2, "sticky": "ew"}
 direct_btn.grid(**direct_btn._grid_kwargs)
@@ -3163,7 +3873,7 @@ progress.grid(**progress._grid_kwargs)
 
 direct_progress_title = tk.Label(
     progress_frame,
-    text="Direct File Download Progress",
+    text="Download List Activity",
     font=('Segoe UI', 10, 'bold'),
     bg=THEME['bg'],
     fg=THEME['fg']
@@ -3173,7 +3883,7 @@ direct_progress_title.grid(**direct_progress_title._grid_kwargs)
 
 direct_progress_label = tk.Label(
     progress_frame,
-    text="Direct file download idle",
+    text="Download list idle",
     font=('Segoe UI', 10),
     bg=THEME['bg'],
     fg=THEME['fg']
@@ -3201,7 +3911,7 @@ output_frame.grid_columnconfigure(0, weight=1)
 
 output_label = tk.Label(
     output_frame,
-    text="Download History:",
+    text="Activity Log:",
     font=('Segoe UI', 12, 'bold'),
     bg=THEME['bg'],
     fg=THEME['fg']
@@ -3224,6 +3934,7 @@ output_box.grid(row=1, column=0, sticky="nsew")
 status_frame = tk.Frame(root, bg=THEME['border'], height=30)
 status_frame.grid(row=1, column=0, sticky="ew")
 status_frame.grid_columnconfigure(0, weight=1)
+status_frame.grid_columnconfigure(1, weight=0)
 
 status_label = tk.Label(
     status_frame,
@@ -3233,6 +3944,19 @@ status_label = tk.Label(
     fg=THEME['fg']
 )
 status_label.grid(row=0, column=0, sticky="w", padx=10)
+
+ansnew_credit_label = tk.Label(
+    status_frame,
+    text="ANSNEW TECH",
+    font=('Segoe UI', 9, 'bold'),
+    bg=THEME['border'],
+    fg=THEME['gray'],
+    cursor='hand2'
+)
+ansnew_credit_label.grid(row=0, column=1, sticky="e", padx=10)
+ansnew_credit_label.bind('<Enter>', lambda _event: ansnew_credit_label.config(fg=THEME['secondary']))
+ansnew_credit_label.bind('<Leave>', lambda _event: ansnew_credit_label.config(fg=THEME['gray']))
+ansnew_credit_label.bind('<Button-1>', lambda _event: webbrowser.open("https://inside.ansnew.com"))
 
 # System Tray Icon
 def tray_show_window(icon=None, menu_item=None):
@@ -3420,7 +4144,7 @@ def update_progress(percent, message=None):
 def update_direct_progress(percent, message=None):
     """Update the direct-download progress bar and label."""
     try:
-        if message == "Direct file download idle" and not is_direct_download_active():
+        if message == "Download list idle" and not is_direct_download_active():
             show_progress_section(None)
         else:
             show_progress_section("direct")
@@ -3485,14 +4209,29 @@ download_cancelled = False
 cancel_event = threading.Event()
 ydl_instance = None
 current_download_thread = None
-direct_download_task = None
+direct_download_manager = None
+download_list_window = None
+download_list_tree = None
+download_list_details_var = None
+download_list_resume_btn = None
+download_list_pause_btn = None
+download_list_cancel_btn = None
+download_list_replace_btn = None
+download_list_open_file_btn = None
+download_list_open_folder_btn = None
+download_list_delete_btn = None
+
+initialize_direct_download_manager()
+handle_direct_download_manager_change()
 
 def cancel_download():
     """Cancel the current download."""
-    global download_cancelled, direct_download_task
+    global download_cancelled
 
-    if direct_download_task is not None and direct_download_state() in {"probing", "downloading", "paused"}:
-        direct_download_task.cancel()
+    manager = initialize_direct_download_manager()
+    active_record = get_active_direct_record()
+    if active_record is not None and direct_download_state() in {"probing", "downloading", "paused"}:
+        manager.cancel_record(active_record.id)
         update_direct_progress(direct_progress['value'], "Cancelling direct download...")
         return
 
@@ -3513,7 +4252,7 @@ def cancel_download():
     except Exception as e:
         log(f"Error during cancellation: {str(e)}")
 
-def download_media(is_audio):
+def download_media(is_audio, url=None):
     """Download media from the provided URL."""
     global ffmpeg_path, ffprobe_path, download_cancelled, ydl_instance
     download_cancelled = False  # Reset cancellation flag
@@ -3551,9 +4290,11 @@ def download_media(is_audio):
         quality_settings['audio_quality'] = current_audio_quality
         quality_settings['format'] = current_format
         
-        url = url_entry.get().strip()
+        url = str(url or "").strip()
         if not url:
-            messagebox.showerror("Error", "Please enter a video URL")
+            url = url_entry.get().strip()
+        if not url:
+            show_url_validation_dialog_threadsafe("")
             hide_loading()
             update_progress(0, "Ready to download")
             return
@@ -3594,7 +4335,7 @@ def download_media(is_audio):
         # Validate URL
         if not url.startswith(('http://', 'https://')):
             log(f"URL validation failed: {url}")
-            messagebox.showerror("Error", "Please enter a valid URL starting with http:// or https://")
+            show_url_validation_dialog_threadsafe(url)
             hide_loading()
             update_progress(0, "Ready to download")
             return

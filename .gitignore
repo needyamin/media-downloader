@@ -2,9 +2,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+*.pyd
+*.dll
 
-# Html pages
+# Local HTML drafts (keep index.html — project landing page)
 *.html
+!index.html
 
 # Virtual environments and local env files
 .venv/
@@ -14,6 +18,7 @@ env/
 ENV/
 .env
 .env.*
+!.env.example
 
 # Tooling and test caches
 .pytest_cache/
@@ -24,35 +29,37 @@ ENV/
 htmlcov/
 pip-wheel-metadata/
 *.egg-info/
+.eggs/
 
 # IDE and OS files
 .vscode/
 .idea/
+.cursor/
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Generated build outputs
-src/desktop_tools/app/build/nuitka/
+# -----------------------------------------------------------------------------
+# Desktop app packaging (Nuitka / PyInstaller / Linux AppImage)
+# -----------------------------------------------------------------------------
+src/desktop_tools/app/build/
 src/desktop_tools/app/dist/
 
-# Generated release artifacts
-release/windows/*.exe
-release/windows/*.msi
-release/windows/*.zip
-release/windows/*.7z
-release/windows/*.log
-release/windows/*.build/
-release/windows/*.dist/
-release/windows/*.onefile-build/
-release/linux/*.AppImage
-release/linux/*.png
-release/linux/appimagetool-*.AppImage
-release/linux/pyinstaller-dist/
-release/linux/pyinstaller-work/
-release/linux/*.AppDir/
+# Nuitka / PyInstaller intermediate folders (e.g. media_download.build, *.dist)
+*.build/
+*.dist/
+*.onefile-build/
+*.spec
 
-# Generated reports and temporary files
+# -----------------------------------------------------------------------------
+# Release outputs (do not commit installers or bundle trees)
+# -----------------------------------------------------------------------------
+release/windows/
+release/linux/
+
+# -----------------------------------------------------------------------------
+# Build diagnostics and temp files
+# -----------------------------------------------------------------------------
 nuitka-crash-report.xml
 *.tmp
 *.bak
@@ -60,3 +67,4 @@ nuitka-crash-report.xml
 *.part.json
 *.ytdl
 *.temp
+*.log

@@ -9,14 +9,22 @@ import subprocess
 import sys
 import urllib.request
 
+from build_manifest import (
+    APP_DIR,
+    ICON_PATH,
+    LINUX_COLLECT_ALL_PACKAGES,
+    LINUX_COLLECT_SUBMODULE_PACKAGES,
+    LINUX_EXCLUDED_MODULES,
+    MAIN_SCRIPT,
+    REPO_ROOT,
+    REQUIREMENTS_FILE,
+    linux_pyinstaller_data_arguments,
+    print_bundle_summary,
+    required_include_modules,
+    validate_source_tree,
+)
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-APP_DIR = Path(__file__).resolve().parent
-MAIN_SCRIPT = APP_DIR / "media_download.py"
-ICON_PATH = APP_DIR / "assets" / "needyamin.ico"
-ASSETS_DIR = APP_DIR / "assets"
-REQUIREMENTS_FILE = APP_DIR / "requirements.txt"
-APP_FLAGS_PATH = REPO_ROOT / "app_flags.json"
+
 RELEASE_DIR = REPO_ROOT / "release"
 LINUX_RELEASE_DIR = RELEASE_DIR / "linux"
 PYINSTALLER_DIST_DIR = LINUX_RELEASE_DIR / "pyinstaller-dist"
@@ -26,6 +34,8 @@ EXECUTABLE_NAME = "Media-Downloader"
 APPIMAGE_NAME = "Media-Downloader-x86_64.AppImage"
 APPIMAGETOOL_NAME = "appimagetool-x86_64.AppImage"
 APPIMAGETOOL_URL = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+BUILD_VENV_DIR = APP_DIR / "build" / "linux-appimage-venv"
+APP_DESKTOP_ID = "com.needyamin.MediaDownloader"
 
 
 def print_linux_runtime_guidance() -> None:
@@ -38,44 +48,80 @@ def print_linux_runtime_guidance() -> None:
     print("Recommended distro packages: ffmpeg xclip wl-clipboard grim gnome-screenshot scrot imagemagick python3-tk")
 
 
-def ensure_pip_available() -> None:
-    """Ensure pip exists for the current Linux Python runtime."""
-    if importlib.util.find_spec("pip") is not None:
-        return
+def get_build_python_executable() -> str:
+    """Return the Python executable used for Linux build tooling."""
+    venv_python = BUILD_VENV_DIR / "bin" / "python"
+    if venv_python.exists():
+        return str(venv_python)
+    return sys.executable
 
-    print("Python package manager 'pip' is missing. Trying to bootstrap it...")
+
+def build_module_available(module_name: str) -> bool:
+    """Check whether a Python module is available in the build environment."""
     try:
-        subprocess.run(
-            [sys.executable, "-m", "ensurepip", "--upgrade"],
-            check=True,
+        result = subprocess.run(
+            [
+                get_build_python_executable(),
+                "-c",
+                "import importlib.util, sys; raise SystemExit(0 if importlib.util.find_spec(sys.argv[1]) is not None else 1)",
+                module_name,
+            ],
+            check=False,
             cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,
         )
     except Exception:
-        pass
+        return False
+    return result.returncode == 0
 
-    if importlib.util.find_spec("pip") is not None:
+
+def ensure_build_virtualenv() -> None:
+    """Create a dedicated Linux build virtualenv to avoid system-package restrictions."""
+    if (BUILD_VENV_DIR / "bin" / "python").exists():
         return
 
-    print("Python 3 pip is not installed in this Linux environment.")
-    print("On Ubuntu/WSL, install it with:")
-    print("  sudo apt update && sudo apt install -y python3-pip python3-venv python3-dev")
-    raise SystemExit(1)
+    if importlib.util.find_spec("venv") is None:
+        print("Python virtualenv support is missing in this Linux environment.")
+        print("On Ubuntu/WSL, install it with:")
+        print("  sudo apt update && sudo apt install -y python3-venv python3-dev")
+        raise SystemExit(1)
+
+    BUILD_VENV_DIR.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Creating Linux build virtualenv at {BUILD_VENV_DIR}...")
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "venv", str(BUILD_VENV_DIR)],
+            check=True,
+            cwd=str(REPO_ROOT),
+        )
+    except subprocess.CalledProcessError as exc:
+        print("Failed to create the Linux build virtualenv.")
+        print("On Ubuntu/WSL, make sure python3-venv is installed:")
+        print("  sudo apt update && sudo apt install -y python3-venv python3-dev")
+        raise SystemExit(1) from exc
 
 
 def ensure_python_package(module_name: str, package_name: str | None = None) -> None:
     """Install a required Python package if it is missing."""
-    if importlib.util.find_spec(module_name) is not None:
+    if build_module_available(module_name):
         return
 
     package_name = package_name or module_name
     print(f"Missing build dependency '{package_name}'. Installing it now...")
     try:
-        subprocess.run([sys.executable, "-m", "pip", "install", package_name], check=True, cwd=str(REPO_ROOT))
+        subprocess.run(
+            [get_build_python_executable(), "-m", "pip", "install", package_name],
+            check=True,
+            cwd=str(REPO_ROOT),
+        )
     except subprocess.CalledProcessError as exc:
         print(f"Failed to install required package: {package_name}")
         raise SystemExit(1) from exc
+
+    if not build_module_available(module_name):
+        print(f"Package installed but module still not available: {module_name}")
+        raise SystemExit(1)
 
 
 def ensure_linux_environment() -> None:
@@ -87,7 +133,7 @@ def ensure_linux_environment() -> None:
 
 def ensure_build_dependencies() -> None:
     """Install Python-level build requirements for AppImage packaging."""
-    ensure_pip_available()
+    ensure_build_virtualenv()
     ensure_python_package("PyInstaller", "pyinstaller")
     ensure_python_package("PIL", "pillow")
     ensure_python_package("yt_dlp", "yt-dlp")
@@ -98,6 +144,8 @@ def ensure_build_dependencies() -> None:
     ensure_python_package("certifi", "certifi")
     ensure_python_package("customtkinter", "customtkinter")
     ensure_python_package("numpy", "numpy")
+    ensure_python_package("numba", "numba")
+    ensure_python_package("llvmlite", "llvmlite")
     ensure_python_package("rembg", "rembg")
     ensure_python_package("onnxruntime", "onnxruntime")
     ensure_python_package("scipy", "scipy")
@@ -111,7 +159,7 @@ def ensure_build_dependencies() -> None:
         print(f"Ensuring application requirements from {REQUIREMENTS_FILE}...")
         try:
             subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)],
+                [get_build_python_executable(), "-m", "pip", "install", "-r", str(REQUIREMENTS_FILE)],
                 check=True,
                 cwd=str(REPO_ROOT),
             )
@@ -137,27 +185,29 @@ def clean_directories() -> None:
 
 def generate_linux_icon() -> Path:
     """Convert the shared ICO icon to a PNG for Linux desktop metadata."""
-    try:
-        from PIL import Image
-    except Exception as exc:
-        print(f"Pillow is required to create the Linux icon: {exc}")
-        raise SystemExit(1) from exc
-
     icon_png = LINUX_RELEASE_DIR / "Media-Downloader.png"
-    with Image.open(ICON_PATH) as icon_image:
-        icon_image.save(icon_png, format="PNG")
+    try:
+        subprocess.run(
+            [
+                get_build_python_executable(),
+                "-c",
+                "from PIL import Image; import sys; Image.open(sys.argv[1]).save(sys.argv[2], format='PNG')",
+                str(ICON_PATH),
+                str(icon_png),
+            ],
+            check=True,
+            cwd=str(REPO_ROOT),
+        )
+    except subprocess.CalledProcessError as exc:
+        print("Pillow is required to create the Linux icon.")
+        raise SystemExit(1) from exc
     return icon_png
 
 
-def build_pyinstaller_bundle() -> Path:
-    """Create a Linux onedir bundle that will be wrapped into an AppImage."""
-    print("Building Linux onedir bundle with PyInstaller...")
-    env = os.environ.copy()
-    existing_pythonpath = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = str(REPO_ROOT / "src") + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
-
+def build_pyinstaller_args() -> list[str]:
+    """Assemble the PyInstaller command line with explicit modules, package data, and exclusions."""
     pyinstaller_args = [
-        sys.executable,
+        get_build_python_executable(),
         "-m",
         "PyInstaller",
         "--noconfirm",
@@ -169,33 +219,30 @@ def build_pyinstaller_bundle() -> Path:
         f"--workpath={PYINSTALLER_WORK_DIR}",
         f"--specpath={PYINSTALLER_WORK_DIR}",
         f"--paths={REPO_ROOT / 'src'}",
-        f"--add-data={ASSETS_DIR}{os.pathsep}assets",
-        f"--add-data={APP_FLAGS_PATH}{os.pathsep}.",
-        f"--add-data={ICON_PATH}{os.pathsep}.",
-        "--collect-submodules=yt_dlp",
-        "--collect-all=customtkinter",
-        "--collect-all=rembg",
-        "--collect-all=onnxruntime",
-        "--collect-all=scipy",
-        "--collect-all=skimage",
-        "--collect-all=pymatting",
-        "--collect-all=pooch",
-        "--collect-all=tqdm",
-        "--collect-all=jsonschema",
-        "--hidden-import=desktop_tools.app.converter_app",
-        "--hidden-import=desktop_tools.app.background_remover_app",
-        "--hidden-import=desktop_tools.app.screenshot_app",
-        "--hidden-import=desktop_tools.app.yscreenrecorder_app",
-        "--hidden-import=rembg",
-        "--hidden-import=onnxruntime",
-        "--hidden-import=onnxruntime.capi.onnxruntime_pybind11_state",
-        "--exclude-module=win32com",
-        "--exclude-module=win32com.client",
-        "--exclude-module=pywintypes",
-        "--exclude-module=pythoncom",
-        "--exclude-module=winreg",
         str(MAIN_SCRIPT),
     ]
+    pyinstaller_args.extend(linux_pyinstaller_data_arguments(os.pathsep))
+
+    for package_name in LINUX_COLLECT_SUBMODULE_PACKAGES:
+        pyinstaller_args.append(f"--collect-submodules={package_name}")
+    for package_name in LINUX_COLLECT_ALL_PACKAGES:
+        pyinstaller_args.append(f"--collect-all={package_name}")
+    for module_name in required_include_modules():
+        pyinstaller_args.append(f"--hidden-import={module_name}")
+    for module_name in LINUX_EXCLUDED_MODULES:
+        pyinstaller_args.append(f"--exclude-module={module_name}")
+
+    return pyinstaller_args
+
+
+def build_pyinstaller_bundle() -> Path:
+    """Create a Linux onedir bundle that will be wrapped into an AppImage."""
+    print("Building Linux onedir bundle with PyInstaller...")
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(REPO_ROOT / "src") + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+
+    pyinstaller_args = build_pyinstaller_args()
 
     try:
         subprocess.run(pyinstaller_args, check=True, cwd=str(REPO_ROOT), env=env)
@@ -217,10 +264,12 @@ def create_appdir(bundle_dir: Path, icon_png: Path) -> Path:
     usr_bin_dir = APPDIR_PATH / "usr" / "bin"
     icon_dir = APPDIR_PATH / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps"
     applications_dir = APPDIR_PATH / "usr" / "share" / "applications"
+    metainfo_dir = APPDIR_PATH / "usr" / "share" / "metainfo"
 
     usr_bin_dir.mkdir(parents=True, exist_ok=True)
     icon_dir.mkdir(parents=True, exist_ok=True)
     applications_dir.mkdir(parents=True, exist_ok=True)
+    metainfo_dir.mkdir(parents=True, exist_ok=True)
 
     for item in bundle_dir.iterdir():
         destination = usr_bin_dir / item.name
@@ -232,7 +281,7 @@ def create_appdir(bundle_dir: Path, icon_png: Path) -> Path:
     shutil.copy2(icon_png, APPDIR_PATH / "Media-Downloader.png")
     shutil.copy2(icon_png, icon_dir / "Media-Downloader.png")
 
-    desktop_file = APPDIR_PATH / "Media-Downloader.desktop"
+    desktop_file = APPDIR_PATH / f"{APP_DESKTOP_ID}.desktop"
     desktop_file.write_text(
         "\n".join(
             [
@@ -241,7 +290,7 @@ def create_appdir(bundle_dir: Path, icon_png: Path) -> Path:
                 "Name=Media Downloader",
                 "Exec=Media-Downloader",
                 "Icon=Media-Downloader",
-                "Categories=AudioVideo;Network;",
+                "Categories=AudioVideo;Video;Audio;",
                 "Terminal=false",
                 "StartupNotify=true",
                 "StartupWMClass=Media Downloader",
@@ -250,7 +299,37 @@ def create_appdir(bundle_dir: Path, icon_png: Path) -> Path:
         ),
         encoding="utf-8",
     )
-    shutil.copy2(desktop_file, applications_dir / "Media-Downloader.desktop")
+    shutil.copy2(desktop_file, applications_dir / f"{APP_DESKTOP_ID}.desktop")
+
+    appdata_file = metainfo_dir / f"{APP_DESKTOP_ID}.appdata.xml"
+    appdata_file.write_text(
+        "\n".join(
+            [
+                '<?xml version="1.0" encoding="UTF-8"?>',
+                '<component type="desktop-application">',
+                f"  <id>{APP_DESKTOP_ID}.desktop</id>",
+                "  <name>Media Downloader</name>",
+                "  <summary>Download media and use bundled desktop tools</summary>",
+                "  <metadata_license>MIT</metadata_license>",
+                "  <project_license>MIT</project_license>",
+                "  <developer id=\"inside.ansnew.com\">",
+                "    <name>Yamin Hossain</name>",
+                "  </developer>",
+                f"  <launchable type=\"desktop-id\">{APP_DESKTOP_ID}.desktop</launchable>",
+                "  <url type=\"homepage\">https://github.com/needyamin/media-downloader</url>",
+                "  <description>",
+                "    <p>Media Downloader bundles video and audio downloads with built-in converter, background remover, screenshot, and screen recorder tools.</p>",
+                "  </description>",
+                "  <categories>",
+                "    <category>AudioVideo</category>",
+                "    <category>Video</category>",
+                "  </categories>",
+                "</component>",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
     app_run = APPDIR_PATH / "AppRun"
     app_run.write_text(
@@ -307,6 +386,8 @@ def build_appimage(appdir: Path, appimagetool_path: Path) -> Path:
 def main() -> None:
     print("Starting Linux AppImage build...")
     ensure_linux_environment()
+    validate_source_tree()
+    print_bundle_summary()
     print_linux_runtime_guidance()
     ensure_build_dependencies()
     clean_directories()

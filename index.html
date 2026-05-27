@@ -3,731 +3,570 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Media Downloader is a desktop toolkit for downloading media, converting video, removing backgrounds, and packaging releases for Windows and Linux.">
-  <title>Media Downloader | Simple Project Overview</title>
+  <meta name="description" content="Media Downloader — free desktop app to download videos, manage file downloads, convert videos, remove backgrounds, and capture your screen.">
+  <title>Media Downloader — Free Desktop Download Suite</title>
   <link rel="icon" href="https://download.ansnew.com/favicon.ico" type="image/x-icon">
-  <link rel="preconnect" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      --bg: #081120;
-      --surface: rgba(255, 255, 255, 0.78);
-      --surface-strong: rgba(255, 255, 255, 0.92);
-      --text: #102033;
-      --muted: #5d6b7c;
-      --border: rgba(15, 23, 42, 0.08);
-      --brand: #4f46e5;
-      --brand-soft: rgba(79, 70, 229, 0.12);
-      --accent: #06b6d4;
-      --shadow: 0 24px 60px rgba(8, 17, 32, 0.12);
+      --white: #ffffff;
+      --gray-50: #f8f9fb;
+      --gray-100: #f1f3f5;
+      --gray-200: #e2e5e9;
+      --gray-300: #d0d4da;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      --blue-50: #eff6ff;
+      --blue-100: #dbeafe;
+      --blue-500: #3b82f6;
+      --blue-600: #2563eb;
+      --blue-700: #1d4ed8;
+      --emerald-50: #ecfdf5;
+      --emerald-100: #d1fae5;
+      --emerald-600: #059669;
+      --amber-50: #fffbeb;
+      --amber-100: #fef3c7;
+      --amber-600: #d97706;
+      --violet-50: #f5f3ff;
+      --violet-100: #ede9fe;
+      --violet-600: #7c3aed;
+      --rose-50: #fff1f2;
+      --rose-100: #ffe4e6;
+      --rose-600: #e11d48;
+      --radius: 12px;
+      --ease: cubic-bezier(.4,0,.2,1);
     }
 
-    html {
-      scroll-behavior: smooth;
-    }
+    html { scroll-behavior: smooth; }
 
     body {
-      color: var(--text);
-      background:
-        radial-gradient(circle at top left, rgba(6, 182, 212, 0.16), transparent 28%),
-        radial-gradient(circle at top right, rgba(79, 70, 229, 0.18), transparent 32%),
-        linear-gradient(180deg, #f4f7fb 0%, #ffffff 35%, #eef4fb 100%);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--gray-700);
+      background: var(--white);
+      -webkit-font-smoothing: antialiased;
     }
 
-    .navbar {
-      backdrop-filter: blur(16px);
-      background: rgba(255, 255, 255, 0.72);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.4);
-    }
+    a { color: var(--blue-600); text-decoration: none; }
+    img { max-width: 100%; height: auto; display: block; }
+    code { font-family: 'SF Mono', monospace; font-size: .82em; background: var(--gray-100); padding: 2px 6px; border-radius: 5px; }
+    kbd { font-family: inherit; font-size: .78em; font-weight: 500; background: var(--white); border: 1px solid var(--gray-200); border-bottom-width: 2px; border-radius: 5px; padding: 2px 7px; }
 
-    .navbar-brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
+    .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
 
-    .brand-logo {
-      width: 2rem;
-      height: 2rem;
-      border-radius: 0.55rem;
-      object-fit: cover;
-      box-shadow: 0 8px 18px rgba(8, 17, 32, 0.14);
+    /* ── Navbar ── */
+    .nav {
+      position: sticky; top: 0; z-index: 50; height: 52px;
+      background: rgba(255,255,255,.85);
+      backdrop-filter: blur(14px) saturate(180%);
+      -webkit-backdrop-filter: blur(14px) saturate(180%);
+      border-bottom: 1px solid var(--gray-200);
     }
+    .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 100%; }
+    .logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: .93rem; color: var(--gray-900); }
+    .logo img { width: 26px; height: 26px; border-radius: 6px; }
+    .nav-list { display: flex; align-items: center; gap: 2px; list-style: none; }
+    .nav-list a { display: block; padding: 5px 12px; font-size: .84rem; font-weight: 500; color: var(--gray-500); border-radius: 7px; transition: color .15s, background .15s; }
+    .nav-list a:hover { color: var(--gray-900); background: var(--gray-50); }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; color: var(--gray-700); }
 
-    .eyebrow-logo {
-      width: 1.15rem;
-      height: 1.15rem;
-      border-radius: 0.35rem;
-      object-fit: cover;
-    }
+    /* ── Buttons ── */
+    .btn { display: inline-flex; align-items: center; gap: 7px; font-family: inherit; font-weight: 600; font-size: .84rem; padding: 9px 20px; border-radius: 9px; border: 1px solid transparent; cursor: pointer; transition: all .18s var(--ease); white-space: nowrap; }
+    .btn svg { flex-shrink: 0; }
+    .btn-fill { background: var(--gray-900); color: var(--white); border-color: var(--gray-900); }
+    .btn-fill:hover { background: var(--gray-700); border-color: var(--gray-700); color: var(--white); }
+    .btn-soft { background: var(--gray-100); color: var(--gray-700); border-color: var(--gray-200); }
+    .btn-soft:hover { background: var(--gray-200); color: var(--gray-900); }
+    .btn-ghost { background: none; color: var(--gray-500); padding-left: 8px; padding-right: 8px; }
+    .btn-ghost:hover { color: var(--gray-900); }
+    .btn-blue { background: var(--blue-600); color: var(--white); border-color: var(--blue-600); }
+    .btn-blue:hover { background: var(--blue-700); border-color: var(--blue-700); color: var(--white); }
+    .btn-sm { font-size: .8rem; padding: 7px 15px; }
 
-    .nav-link {
-      color: var(--muted);
-      font-weight: 500;
-    }
+    /* ── Hero ── */
+    .hero { padding: 44px 0 40px; }
+    .hero .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; align-items: center; }
+    .hero-label { display: inline-flex; align-items: center; gap: 7px; font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--emerald-600); background: var(--emerald-50); border: 1px solid var(--emerald-100); padding: 4px 12px; border-radius: 20px; margin-bottom: 14px; }
+    .hero-label .dot { width: 5px; height: 5px; background: var(--emerald-600); border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+    .hero h1 { font-size: 2.3rem; font-weight: 800; line-height: 1.15; letter-spacing: -.025em; color: var(--gray-900); margin-bottom: 14px; }
+    .hero h1 em { font-style: normal; color: var(--blue-600); }
+    .hero-sub { color: var(--gray-500); font-size: 1rem; line-height: 1.65; margin-bottom: 8px; max-width: 460px; }
+    .hero-sub strong { color: var(--gray-700); font-weight: 600; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+    .hero-img { border-radius: 14px; border: 1px solid var(--gray-200); box-shadow: 0 4px 24px rgba(0,0,0,.06); transition: transform .4s var(--ease), box-shadow .4s var(--ease); }
+    .hero-img:hover { transform: translateY(-4px); box-shadow: 0 10px 36px rgba(0,0,0,.09); }
 
-    .nav-link:hover,
-    .nav-link:focus {
-      color: var(--brand);
-    }
+    /* ── Sections ── */
+    section { padding: 40px 0; }
+    .sec-gray { background: var(--gray-50); }
+    .sec-head { margin-bottom: 24px; }
+    .sec-head h2 { font-size: 1.45rem; font-weight: 700; letter-spacing: -.015em; color: var(--gray-900); margin-bottom: 4px; }
+    .sec-head p { color: var(--gray-500); font-size: .9rem; max-width: 520px; }
+    .centered { text-align: center; }
+    .centered .sec-head p { margin: 0 auto; }
 
-    .hero {
-      padding: 5rem 0 4rem;
-    }
-
-    .eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      padding: 0.55rem 1rem;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.72);
-      border: 1px solid rgba(79, 70, 229, 0.14);
-      color: var(--brand);
-      font-weight: 600;
-      box-shadow: 0 10px 30px rgba(79, 70, 229, 0.08);
-    }
-
-    .hero h1 {
-      font-size: clamp(2.5rem, 5vw, 4.5rem);
-      line-height: 1.02;
-      letter-spacing: -0.04em;
-      font-weight: 800;
-    }
-
-    .hero-lead {
-      font-size: 1.1rem;
-      color: var(--muted);
-      max-width: 42rem;
-    }
-
-    .hero-panel,
-    .section-card,
-    .metric-card,
-    .feature-card,
-    .tool-card,
-    .command-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(16px);
-    }
-
-    .hero-panel {
-      border-radius: 1.75rem;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
-
-    .hero-preview {
-      background: linear-gradient(135deg, rgba(79, 70, 229, 0.12), rgba(6, 182, 212, 0.12));
-    }
-
-    .hero-info {
-      padding: 1.4rem;
-      background: var(--surface-strong);
-      border-top: 1px solid var(--border);
-    }
-
-    .hero-info-title {
-      font-size: 1.05rem;
-      font-weight: 750;
-      margin-bottom: 0.45rem;
-    }
-
-    .hero-info-copy {
-      color: var(--muted);
-      margin-bottom: 0;
-    }
-
-    .hero-info-grid {
+    /* ── What it does ── */
+    .what-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.85rem;
-      margin-top: 1rem;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
     }
-
-    .hero-info-item {
-      padding: 0.95rem 1rem;
-      border-radius: 1rem;
-      background: rgba(255, 255, 255, 0.92);
-      border: 1px solid rgba(15, 23, 42, 0.08);
+    .what-card {
+      text-align: center;
+      padding: 22px 14px 18px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      background: var(--white);
+      transition: box-shadow .2s var(--ease), border-color .2s var(--ease);
     }
+    .what-card:hover { border-color: var(--gray-300); box-shadow: 0 3px 12px rgba(0,0,0,.04); }
+    .what-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 12px;
+      font-size: 1.3rem;
+    }
+    .wi-blue   { background: var(--blue-50); }
+    .wi-amber  { background: var(--amber-50); }
+    .wi-violet { background: var(--violet-50); }
+    .wi-green  { background: var(--emerald-50); }
+    .what-card h3 { font-size: .88rem; font-weight: 600; color: var(--gray-800); margin-bottom: 4px; }
+    .what-card p { font-size: .8rem; color: var(--gray-500); line-height: 1.55; }
 
-    .hero-info-label {
-      display: block;
-      font-size: 0.74rem;
+    /* ── How it works ── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .step {
+      position: relative;
+      padding: 18px 16px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      background: var(--white);
+    }
+    .step-num {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--gray-900);
+      color: var(--white);
+      font-size: .72rem;
       font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--brand);
-      margin-bottom: 0.35rem;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 10px;
+    }
+    .step h3 { font-size: .88rem; font-weight: 600; color: var(--gray-800); margin-bottom: 3px; }
+    .step p { font-size: .82rem; color: var(--gray-500); line-height: 1.55; }
+
+    /* ── Features detail ── */
+    .feat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .feat {
+      padding: 18px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      background: var(--white);
+      transition: box-shadow .2s var(--ease), border-color .2s var(--ease);
+    }
+    .feat:hover { border-color: var(--gray-300); box-shadow: 0 3px 12px rgba(0,0,0,.04); }
+    .feat-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .feat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .fd-blue   { background: var(--blue-600); }
+    .fd-amber  { background: var(--amber-600); }
+    .fd-violet { background: var(--violet-600); }
+    .fd-green  { background: var(--emerald-600); }
+    .feat-top h3 { font-size: .9rem; font-weight: 600; color: var(--gray-800); }
+    .feat p { font-size: .84rem; color: var(--gray-500); line-height: 1.6; }
+    .feat ul { list-style: none; margin-top: 6px; }
+    .feat li { font-size: .82rem; color: var(--gray-500); line-height: 1.6; padding-left: 16px; position: relative; }
+    .feat li::before { content: '✓'; position: absolute; left: 0; color: var(--emerald-600); font-weight: 600; font-size: .75rem; }
+
+    /* ── All tools strip ── */
+    .tools-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    .ts {
+      text-align: center;
+      padding: 14px 8px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      background: var(--white);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .ts:hover { border-color: var(--gray-300); box-shadow: 0 2px 8px rgba(0,0,0,.03); }
+    .ts-icon { font-size: 1.2rem; margin-bottom: 6px; display: block; }
+    .ts h4 { font-size: .76rem; font-weight: 600; color: var(--gray-700); margin-bottom: 2px; }
+    .ts p { font-size: .7rem; color: var(--gray-400); line-height: 1.4; }
+
+    /* ── Shortcut table ── */
+    .sc-box { border: 1px solid var(--gray-200); border-radius: var(--radius); overflow: hidden; background: var(--white); margin-top: 16px; }
+    .sc-head { padding: 9px 16px; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--gray-400); border-bottom: 1px solid var(--gray-200); }
+    .sc-box table { width: 100%; border-collapse: collapse; }
+    .sc-box td { padding: 6px 16px; font-size: .82rem; border-bottom: 1px solid var(--gray-100); color: var(--gray-600); }
+    .sc-box tr:last-child td { border-bottom: none; }
+    .sc-box td:first-child { width: 42%; color: var(--gray-400); }
+
+    /* ── Download ── */
+    .dl-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .dl-card {
+      padding: 20px;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      background: var(--white);
+    }
+    .dl-card h3 { font-size: .88rem; font-weight: 600; color: var(--gray-800); margin-bottom: 4px; }
+    .dl-card p { font-size: .84rem; color: var(--gray-500); line-height: 1.6; }
+    .dl-card .btn { margin-top: 12px; }
+    .dl-highlight {
+      background: var(--blue-50);
+      border-color: var(--blue-100);
     }
 
-    .hero-info-text {
-      color: var(--text);
-      font-weight: 600;
-      line-height: 1.4;
+    /* ── Footer ── */
+    .foot { border-top: 1px solid var(--gray-200); padding: 18px 0; }
+    .foot .wrap { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .foot-brand { font-size: .84rem; font-weight: 600; color: var(--gray-800); margin-bottom: 2px; }
+    .foot-links { display: flex; flex-wrap: wrap; gap: 0; font-size: .78rem; }
+    .foot-links a { color: var(--gray-400); transition: color .15s; }
+    .foot-links a:hover { color: var(--gray-700); }
+    .foot-links .dot { color: var(--gray-300); margin: 0 6px; }
+    .foot-legal { font-size: .74rem; color: var(--gray-400); margin-top: 4px; }
+
+    /* ── Reveal ── */
+    .rv { opacity: 0; transform: translateY(16px); transition: opacity .45s var(--ease), transform .45s var(--ease); }
+    .rv.show { opacity: 1; transform: translateY(0); }
+
+    /* ── Responsive ── */
+    @media (max-width: 860px) {
+      .hero .wrap { grid-template-columns: 1fr; gap: 24px; }
+      .hero h1 { font-size: 1.9rem; }
+      .what-grid { grid-template-columns: 1fr 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .feat-grid { grid-template-columns: 1fr; }
+      .tools-strip { grid-template-columns: repeat(3, 1fr); }
+      .dl-row { grid-template-columns: 1fr; }
     }
-
-    .preview-image {
-      width: 100%;
-      display: block;
-      object-fit: cover;
-    }
-
-    .stat-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.45rem;
-      padding: 0.65rem 0.9rem;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.7);
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      color: #1f2e43;
-      font-weight: 600;
-    }
-
-    .section-title {
-      font-size: clamp(1.8rem, 3vw, 2.6rem);
-      letter-spacing: -0.03em;
-      font-weight: 750;
-      margin-bottom: 0.75rem;
-    }
-
-    .section-copy {
-      color: var(--muted);
-      max-width: 42rem;
-    }
-
-    .section-shell {
-      padding: 1rem 0 4rem;
-    }
-
-    .metric-card,
-    .feature-card,
-    .tool-card,
-    .command-card,
-    .section-card {
-      border-radius: 1.35rem;
-      height: 100%;
-      transition: transform 0.18s ease, box-shadow 0.18s ease;
-    }
-
-    .metric-card:hover,
-    .feature-card:hover,
-    .tool-card:hover,
-    .command-card:hover,
-    .section-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 28px 70px rgba(8, 17, 32, 0.14);
-    }
-
-    .metric-value {
-      font-size: 1.75rem;
-      font-weight: 800;
-      letter-spacing: -0.04em;
-    }
-
-    .badge-soft {
-      display: inline-block;
-      padding: 0.45rem 0.75rem;
-      border-radius: 999px;
-      background: var(--brand-soft);
-      color: var(--brand);
-      font-size: 0.86rem;
-      font-weight: 700;
-    }
-
-    .icon-dot {
-      width: 2.75rem;
-      height: 2.75rem;
-      border-radius: 0.95rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, rgba(79, 70, 229, 0.16), rgba(6, 182, 212, 0.16));
-      color: var(--brand);
-      font-weight: 800;
-      margin-bottom: 1rem;
-    }
-
-    .list-clean {
-      padding-left: 1.1rem;
-      margin-bottom: 0;
-      color: var(--muted);
-    }
-
-    .list-clean li + li {
-      margin-top: 0.55rem;
-    }
-
-    .panel-gradient {
-      background:
-        linear-gradient(160deg, rgba(79, 70, 229, 0.96), rgba(14, 165, 233, 0.9)),
-        #0f172a;
-      color: #fff;
-    }
-
-    .panel-gradient .section-copy,
-    .panel-gradient .text-muted-alt,
-    .panel-gradient .list-clean {
-      color: rgba(255, 255, 255, 0.82);
-    }
-
-    pre {
-      margin: 0;
-      white-space: pre-wrap;
-      word-break: break-word;
-      color: #dbeafe;
-      background: #07111f;
-      border-radius: 1rem;
-      padding: 1rem 1.1rem;
-      font-size: 0.92rem;
-      border: 1px solid rgba(148, 163, 184, 0.12);
-    }
-
-    .pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-    }
-
-    .pill-link {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0.95rem 1.1rem;
-      border-radius: 1rem;
-      text-decoration: none;
-      color: var(--text);
-      border: 1px solid rgba(15, 23, 42, 0.08);
-      background: rgba(255, 255, 255, 0.7);
-      font-weight: 600;
-      transition: all 0.18s ease;
-    }
-
-    .pill-link:hover {
-      transform: translateY(-2px);
-      color: var(--brand);
-      border-color: rgba(79, 70, 229, 0.18);
-    }
-
-    .subtle {
-      color: var(--muted);
-    }
-
-    footer {
-      padding: 2.5rem 0 3rem;
-      color: var(--muted);
-    }
-
-    @media (max-width: 991.98px) {
-      .hero {
-        padding-top: 4rem;
-      }
-
-      .hero-info-grid {
-        grid-template-columns: 1fr;
-      }
+    @media (max-width: 580px) {
+      .nav-list { display: none; }
+      .nav-list.open { display: flex; flex-direction: column; position: absolute; top: 52px; left: 0; right: 0; background: var(--white); border-bottom: 1px solid var(--gray-200); padding: 8px 20px 12px; box-shadow: 0 6px 20px rgba(0,0,0,.06); }
+      .hamburger { display: block; }
+      .hero { padding: 28px 0 24px; }
+      .hero h1 { font-size: 1.6rem; }
+      section { padding: 28px 0; }
+      .what-grid { grid-template-columns: 1fr; }
+      .tools-strip { grid-template-columns: repeat(2, 1fr); }
+      .hero-actions { flex-direction: column; }
+      .hero-actions .btn { justify-content: center; }
     }
   </style>
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg sticky-top" data-bs-theme="light">
-    <div class="container">
-      <a class="navbar-brand fw-bold" href="#top">
-        <img class="brand-logo" src="https://download.ansnew.com/favicon.ico" alt="Media Downloader logo">
-        <span>Media Downloader</span>
+
+  <!-- Navbar -->
+  <nav class="nav">
+    <div class="wrap">
+      <a class="logo" href="#top">
+        <img src="https://download.ansnew.com/favicon.ico" alt="" width="26" height="26">
+        Media Downloader
       </a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
+      <ul class="nav-list" id="menu">
+        <li><a href="#what">What it does</a></li>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#tools">Tools</a></li>
+        <li><a href="#download">Download</a></li>
+        <li style="margin-left:6px"><a class="btn btn-fill btn-sm" href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">Get it free</a></li>
+      </ul>
+      <button class="hamburger" id="toggle" aria-label="Menu">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
       </button>
-      <div class="collapse navbar-collapse" id="mainNav">
-        <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
-          <li class="nav-item"><a class="nav-link" href="#overview">Overview</a></li>
-          <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
-          <li class="nav-item"><a class="nav-link" href="#tools">Tools</a></li>
-          <li class="nav-item"><a class="nav-link" href="#builds">Builds</a></li>
-          <li class="nav-item"><a class="nav-link" href="#structure">Structure</a></li>
-          <li class="nav-item ms-lg-2"><a class="btn btn-dark btn-sm rounded-pill px-3" href="https://github.com/needyamin/media-downloader" target="_blank" rel="noreferrer">GitHub</a></li>
-        </ul>
-      </div>
     </div>
   </nav>
 
-  <header id="top" class="hero">
-    <div class="container">
-      <div class="row align-items-center g-4 g-xl-5">
-        <div class="col-lg-6">
-          <span class="eyebrow mb-3">
-            <img class="eyebrow-logo" src="https://download.ansnew.com/favicon.ico" alt="">
-            Open-source desktop media toolkit
-          </span>
-          <h1 class="mb-3">Simple, capable media tools in one desktop app.</h1>
-          <p class="hero-lead mb-4">
-            Media Downloader combines downloading, conversion, background removal, and FFmpeg management in one clean desktop workflow. It is built with a practical Python codebase and packaged for both Windows and Linux.
-          </p>
-          <div class="d-flex flex-wrap gap-3 mb-4">
-            <a class="btn btn-primary btn-lg rounded-pill px-4" href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">Download Releases</a>
-            <a class="btn btn-outline-dark btn-lg rounded-pill px-4" href="#builds">View Build Flow</a>
-          </div>
-          <div class="d-flex flex-wrap gap-2">
-            <span class="stat-chip">Tkinter desktop app</span>
-            <span class="stat-chip">yt-dlp + FFmpeg</span>
-            <span class="stat-chip">Windows + Linux AppImage</span>
-          </div>
+  <!-- Hero — immediately tells the user what this is -->
+  <header class="hero" id="top">
+    <div class="wrap">
+      <div>
+        <div class="hero-label"><span class="dot"></span> Free &amp; Open Source</div>
+        <h1>One app to <em>download</em>, <em>convert</em> &amp; <em>capture</em> media</h1>
+        <p class="hero-sub">
+          <strong>Media Downloader</strong> is a free desktop app that combines 6 tools into one: download videos from websites, manage file downloads, convert video formats, remove image backgrounds, take screenshots, and record your screen.
+        </p>
+        <p class="hero-sub" style="font-size:.88rem">
+          Works on <strong>Windows</strong> and <strong>Linux</strong>. No account needed. No ads. MIT licensed.
+        </p>
+        <div class="hero-actions">
+          <a class="btn btn-fill" href="https://github.com/needyamin/media-downloader/releases/latest" target="_blank" rel="noreferrer">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download for Windows
+          </a>
+          <a class="btn btn-soft" href="https://github.com/needyamin/media-downloader/releases/latest" target="_blank" rel="noreferrer">Linux AppImage</a>
+          <a class="btn btn-ghost" href="https://github.com/needyamin/media-downloader" target="_blank" rel="noreferrer">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 00-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6a3.2 3.2 0 00-1.3-1.7c-1.1-.7.1-.7.1-.7a2.5 2.5 0 011.8 1.2 2.5 2.5 0 003.4 1 2.5 2.5 0 01.7-1.6c-2.6-.3-5.4-1.3-5.4-5.9a4.6 4.6 0 011.2-3.2 4.3 4.3 0 01.1-3.2s1-.3 3.3 1.2a11.5 11.5 0 016 0c2.3-1.5 3.3-1.2 3.3-1.2a4.3 4.3 0 01.1 3.2 4.6 4.6 0 011.2 3.2c0 4.6-2.8 5.6-5.5 5.9a2.8 2.8 0 01.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0012 .3"/></svg>
+            GitHub
+          </a>
         </div>
-        <div class="col-lg-6">
-          <div class="hero-panel">
-            <div class="hero-preview p-3 p-md-4">
-              <img class="preview-image rounded-4" src="https://github.com/user-attachments/assets/9be2138d-cb43-425d-b8f9-a3c53309076f" alt="Media Downloader application preview">
-            </div>
-            <div class="hero-info">
-              <div class="hero-info-title">Everything stays in one workflow</div>
-              <p class="hero-info-copy">
-                Download media, convert files, manage FFmpeg, and use extra desktop tools without jumping between separate apps.
-              </p>
-              <div class="hero-info-grid">
-                <div class="hero-info-item">
-                  <span class="hero-info-label">Downloads</span>
-                  <div class="hero-info-text">Playlist support, format choices, and practical quality controls.</div>
-                </div>
-                <div class="hero-info-item">
-                  <span class="hero-info-label">Conversion</span>
-                  <div class="hero-info-text">Built-in FFmpeg handling for video and audio tasks.</div>
-                </div>
-                <div class="hero-info-item">
-                  <span class="hero-info-label">Extra Tools</span>
-                  <div class="hero-info-text">Background removal and helper actions from the same desktop UI.</div>
-                </div>
-                <div class="hero-info-item">
-                  <span class="hero-info-label">Releases</span>
-                  <div class="hero-info-text">Packaged for both Windows and Linux AppImage distribution.</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      </div>
+      <div>
+        <img class="hero-img" src="https://github.com/user-attachments/assets/9be2138d-cb43-425d-b8f9-a3c53309076f" alt="Media Downloader app window showing download interface" loading="eager">
       </div>
     </div>
   </header>
 
-  <main>
-    <section id="overview" class="section-shell">
-      <div class="container">
-        <div class="row g-4">
-          <div class="col-lg-8">
-            <h2 class="section-title">What the project does</h2>
-            <p class="section-copy mb-0">
-              This repository centers on a main desktop app launched through <code>run.py</code>. The app downloads media from supported public sources, handles playlist workflows, offers format and quality controls, and opens extra tools from the same interface.
-            </p>
-          </div>
-          <div class="col-lg-4">
-            <div class="section-card p-4 h-100">
-              <span class="badge-soft mb-3">At a glance</span>
-              <ul class="list-clean">
-                <li>Main launcher: <code>run.py</code></li>
-                <li>Main app: <code>src/desktop_tools/app/media_download.py</code></li>
-                <li>Shared modules: <code>shared/ffmpeg.py</code> and <code>shared/resources.py</code></li>
-                <li>Windows packaging: Nuitka + Inno Setup</li>
-                <li>Linux packaging: PyInstaller + AppImage</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div class="row g-4 mt-1">
-          <div class="col-sm-6 col-xl-3">
-            <div class="metric-card p-4">
-              <div class="text-uppercase small subtle mb-2">Core focus</div>
-              <div class="fw-bold fs-5 mb-2">Media downloads</div>
-              <div class="subtle">Public-source video and audio workflows with playlist support.</div>
-            </div>
-          </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="metric-card p-4">
-              <div class="text-uppercase small subtle mb-2">Built-in tool</div>
-              <div class="fw-bold fs-5 mb-2">Video conversion</div>
-              <div class="subtle">Uses the same managed FFmpeg runtime instead of a separate install.</div>
-            </div>
-          </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="metric-card p-4">
-              <div class="text-uppercase small subtle mb-2">Built-in tool</div>
-              <div class="fw-bold fs-5 mb-2">Background remover</div>
-              <div class="subtle">Integrated into the desktop app rather than shipped as a separate product.</div>
-            </div>
-          </div>
-          <div class="col-sm-6 col-xl-3">
-            <div class="metric-card p-4">
-              <div class="text-uppercase small subtle mb-2">Quality of life</div>
-              <div class="fw-bold fs-5 mb-2">Clipboard and tray</div>
-              <div class="subtle">Supports clipboard monitoring and tray-based background use.</div>
-            </div>
-          </div>
-        </div>
+  <!-- WHAT IT DOES — 4 clear capabilities at a glance -->
+  <section id="what" class="sec-gray">
+    <div class="wrap">
+      <div class="sec-head centered rv">
+        <h2>What can you do with it?</h2>
+        <p>Four things, one app. Pick what you need.</p>
       </div>
-    </section>
-
-    <section id="features" class="section-shell">
-      <div class="container">
-        <h2 class="section-title">Why it feels practical</h2>
-        <p class="section-copy mb-4">
-          The app is designed to stay useful as a real desktop tool, not just a one-screen downloader.
-        </p>
-
-        <div class="row g-4">
-          <div class="col-md-6 col-xl-4">
-            <div class="feature-card p-4">
-              <div class="icon-dot">01</div>
-              <h3 class="h5">Flexible downloads</h3>
-              <p class="subtle mb-0">Download video, audio, playlists, and direct file URLs with format and quality controls.</p>
-            </div>
+      <div class="what-grid">
+        <div class="what-card rv">
+          <div class="what-icon wi-blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </div>
-          <div class="col-md-6 col-xl-4">
-            <div class="feature-card p-4">
-              <div class="icon-dot">02</div>
-              <h3 class="h5">Shared FFmpeg management</h3>
-              <p class="subtle mb-0">The app can find, install, update, and reuse FFmpeg automatically across tools.</p>
-            </div>
-          </div>
-          <div class="col-md-6 col-xl-4">
-            <div class="feature-card p-4">
-              <div class="icon-dot">03</div>
-              <h3 class="h5">Clipboard-aware workflow</h3>
-              <p class="subtle mb-0">Recent copied links can be detected and surfaced quickly without extra steps.</p>
-            </div>
-          </div>
-          <div class="col-md-6 col-xl-4">
-            <div class="feature-card p-4">
-              <div class="icon-dot">04</div>
-              <h3 class="h5">Tray support</h3>
-              <p class="subtle mb-0">Run it in the background and keep common actions available from the system tray.</p>
-            </div>
-          </div>
-          <div class="col-md-6 col-xl-4">
-            <div class="feature-card p-4">
-              <div class="icon-dot">05</div>
-              <h3 class="h5">Clean packaging flow</h3>
-              <p class="subtle mb-0">Windows and Linux builds are scripted so release artifacts are reproducible.</p>
-            </div>
-          </div>
-          <div class="col-md-6 col-xl-4">
-            <div class="feature-card p-4">
-              <div class="icon-dot">06</div>
-              <h3 class="h5">Room to grow</h3>
-              <p class="subtle mb-0">Shared helpers live separately from tool-specific code, which keeps future expansion manageable.</p>
-            </div>
-          </div>
+          <h3>Download Videos</h3>
+          <p>Paste a URL → choose quality → download. Supports many public video sites.</p>
         </div>
-      </div>
-    </section>
-
-    <section id="tools" class="section-shell">
-      <div class="container">
-        <div class="row g-4 align-items-stretch">
-          <div class="col-md-6 col-xl-3">
-            <div class="tool-card p-4 h-100">
-              <span class="badge-soft mb-3">Main app</span>
-              <h3 class="h4">Media Downloader</h3>
-              <p class="subtle">The main window handles URL entry, progress tracking, playlist control, logs, and the top-level workflow.</p>
-              <ul class="list-clean">
-                <li>Launches through <code>run.py</code></li>
-                <li>Implements the downloader UI and tray behavior</li>
-                <li>Acts as the entry point for companion tools</li>
-              </ul>
-            </div>
+        <div class="what-card rv">
+          <div class="what-icon wi-amber">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           </div>
-          <div class="col-md-6 col-xl-3">
-            <div class="tool-card p-4 h-100">
-              <span class="badge-soft mb-3">Companion tool</span>
-              <h3 class="h4">Video Converter</h3>
-              <p class="subtle">Opened from the app menu and uses the shared FFmpeg runtime for conversion work.</p>
-              <ul class="list-clean">
-                <li>File: <code>converter_app.py</code></li>
-                <li>Menu path: <code>Tools -&gt; Video Converter</code></li>
-                <li>Designed to stay responsive while FFmpeg prepares in the background</li>
-              </ul>
-            </div>
-          </div>
-          <div class="col-md-6 col-xl-3">
-            <div class="tool-card p-4 h-100">
-              <span class="badge-soft mb-3">Companion tool</span>
-              <h3 class="h4">BG Remover</h3>
-              <p class="subtle">A second integrated utility that lives inside the same desktop product and project structure.</p>
-              <ul class="list-clean">
-                <li>File: <code>background_remover_app.py</code></li>
-                <li>Menu path: <code>Tools -&gt; BG Remover</code></li>
-                <li>Shares packaging, assets, and release flow with the main app</li>
-              </ul>
-            </div>
-          </div>
-          <div class="col-md-6 col-xl-3">
-            <div class="tool-card p-4 h-100">
-              <span class="badge-soft mb-3">Companion tool</span>
-              <h3 class="h4">Screenshot Studio</h3>
-              <p class="subtle">Capture the full screen or a selected region, then mark up the result with polished annotation tools before exporting.</p>
-              <ul class="list-clean">
-                <li>File: <code>screenshot_app.py</code></li>
-                <li>Menu path: <code>Tools -&gt; Screenshot Studio</code></li>
-                <li>Includes pen, arrows, circles, border boxes, triangles, undo/redo, and a color picker</li>
-              </ul>
-            </div>
-          </div>
+          <h3>Manage Downloads</h3>
+          <p>Queue any file link — .mp4, .zip, .exe. Pause, resume, and track progress like IDM.</p>
         </div>
-      </div>
-    </section>
-
-    <section id="builds" class="section-shell">
-      <div class="container">
-        <div class="row g-4">
-          <div class="col-lg-5">
-            <div class="section-card panel-gradient p-4 p-lg-5 h-100">
-              <span class="badge text-bg-light text-dark rounded-pill mb-3">Build overview</span>
-              <h2 class="section-title mb-3">Release paths kept simple</h2>
-              <p class="section-copy mb-4">
-                Windows builds compile the app with Nuitka and wrap it with Inno Setup. Linux builds produce a PyInstaller bundle and package it as an AppImage. The same repo also supports AppImage creation from Windows by calling Ubuntu WSL directly.
-              </p>
-              <ul class="list-clean">
-                <li>Windows output: <code>release/windows</code></li>
-                <li>Linux output: <code>release/linux</code></li>
-                <li>Linux artifact: <code>Media-Downloader-x86_64.AppImage</code></li>
-              </ul>
-            </div>
+        <div class="what-card rv">
+          <div class="what-icon wi-violet">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
           </div>
-          <div class="col-lg-7">
-            <div class="row g-4">
-              <div class="col-12">
-                <div class="command-card p-4">
-                  <span class="badge-soft mb-3">Windows build</span>
-                  <h3 class="h5">Nuitka + Inno Setup</h3>
-                  <p class="subtle mb-3">Build the Windows executable and installer from the project root.</p>
-                  <pre>python "src\desktop_tools\app\nutika_build.py"</pre>
-                </div>
-              </div>
-              <div class="col-12">
-                <div class="command-card p-4">
-                  <span class="badge-soft mb-3">Linux build</span>
-                  <h3 class="h5">Native Linux or Ubuntu WSL</h3>
-                  <p class="subtle mb-3">Use Linux directly, or run the same flow through Ubuntu WSL from Windows.</p>
-                  <pre>python3 "src/desktop_tools/app/linux_appimage_build.py"
-
-wsl.exe -d Ubuntu -u root -- sh -lc "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-venv python3-dev python3-tk build-essential patchelf file zsync libglib2.0-0 libnss3 libgtk-3-0 libx11-6 libxkbcommon0 libdbus-1-3 libasound2t64 libtbb12"
-wsl.exe -d Ubuntu -- sh -lc "cd /mnt/c/path/to/media-downloader && python3 -m venv .venv-wsl && . .venv-wsl/bin/activate && python src/desktop_tools/app/linux_appimage_build.py"</pre>
-                </div>
-              </div>
-            </div>
-          </div>
+          <h3>Convert &amp; Edit</h3>
+          <p>Convert video formats and remove image backgrounds with built-in AI tools.</p>
         </div>
-      </div>
-    </section>
-
-    <section id="structure" class="section-shell">
-      <div class="container">
-        <div class="row g-4">
-          <div class="col-lg-6">
-            <div class="section-card p-4 p-lg-5 h-100">
-              <h2 class="section-title">Project structure</h2>
-              <p class="section-copy mb-4">
-                The repo keeps the root lightweight and moves tool-specific implementation into the app package while shared helpers stay in one place.
-              </p>
-              <pre>media-downloader/
-|- run.py
-|- README.md
-|- index.html
-|- app_flags.json
-`- src/
-   `- desktop_tools/
-      |- app/
-      |  |- media_download.py
-      |  |- converter_app.py
-      |  |- background_remover_app.py
-      |  |- screenshot_app.py
-      |  |- nutika_build.py
-      |  `- linux_appimage_build.py
-      `- shared/
-         |- ffmpeg.py
-         `- resources.py</pre>
-            </div>
+        <div class="what-card rv">
+          <div class="what-icon wi-green">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
           </div>
-          <div class="col-lg-6">
-            <div class="section-card p-4 p-lg-5 mb-4">
-              <h3 class="h4">Runtime configuration</h3>
-              <p class="subtle mb-3">Lightweight behavior can be tuned from <code>app_flags.json</code>.</p>
-              <ul class="list-clean">
-                <li><code>debug_logging</code> reduces extra internal noise when set to <code>false</code></li>
-                <li><code>disabled_domains</code> blocks selected domains even if they are supported</li>
-                <li>Other flags adjust queue polling, clipboard timing, and log limits</li>
-              </ul>
-            </div>
-            <div class="section-card p-4 p-lg-5">
-              <h3 class="h4">Responsible use</h3>
-              <p class="subtle mb-3">
-                This software is provided for educational and personal use. Users are responsible for making sure their usage follows applicable laws and platform terms.
-              </p>
-              <p class="mb-0 fw-semibold text-danger">
-                Do not use this project to access or download content in violation of terms of service or applicable law.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="section-shell pb-3">
-      <div class="container">
-        <div class="section-card p-4 p-lg-5">
-          <div class="row g-4 align-items-center">
-            <div class="col-lg-7">
-              <span class="badge-soft mb-3">Project links</span>
-              <h2 class="section-title mb-2">Explore the repo, releases, and docs</h2>
-              <p class="section-copy mb-0">
-                The project is open-source, release-oriented, and organized so the desktop app can keep growing without becoming messy.
-              </p>
-            </div>
-            <div class="col-lg-5">
-              <div class="pill-row justify-content-lg-end">
-                <a class="pill-link" href="https://github.com/needyamin/media-downloader" target="_blank" rel="noreferrer">Repository</a>
-                <a class="pill-link" href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">Releases</a>
-                <a class="pill-link" href="https://github.com/needyamin/media-downloader/issues" target="_blank" rel="noreferrer">Issues</a>
-                <a class="pill-link" href="https://needyamin.github.io" target="_blank" rel="noreferrer">Author site</a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="container">
-      <div class="section-card p-4 p-lg-5">
-        <div class="row g-4 align-items-center">
-          <div class="col-lg-7">
-            <span class="badge-soft mb-3">Ready to try it?</span>
-            <h2 class="h3 mb-2">Download the latest Windows build or explore the project online.</h2>
-            <p class="subtle mb-0">
-              Media Downloader is an open-source desktop toolkit with integrated download, conversion, and background-removal workflows, plus shared FFmpeg management.
-            </p>
-          </div>
-          <div class="col-lg-5">
-            <div class="d-flex flex-wrap gap-3 justify-content-lg-end">
-              <a class="btn btn-primary btn-lg rounded-pill px-4" href="https://github.com/needyamin/media-downloader/releases/download/v2.0.0/MediaDownloader_Setup.exe" target="_blank" rel="noreferrer">Download for Windows</a>
-              <a class="btn btn-outline-dark btn-lg rounded-pill px-4" href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">All Releases</a>
-            </div>
-            <div class="subtle small mt-3 text-lg-end">
-              Direct file: <code>MediaDownloader_Setup.exe</code><br>
-              License: <strong class="text-dark">MIT</strong>
-            </div>
-          </div>
+          <h3>Capture Screen</h3>
+          <p>Take screenshots or record your screen with region selection and annotation tools.</p>
         </div>
       </div>
     </div>
+  </section>
+
+  <!-- HOW IT WORKS — simple 3 steps -->
+  <section>
+    <div class="wrap">
+      <div class="sec-head centered rv">
+        <h2>How it works</h2>
+        <p>No technical knowledge required. Just install and go.</p>
+      </div>
+      <div class="steps">
+        <div class="step rv">
+          <div class="step-num">1</div>
+          <h3>Install the app</h3>
+          <p>Download <code>MediaDownloader_Setup.exe</code> on Windows or the AppImage on Linux. The installer bundles the full standalone app — no extra Python install needed.</p>
+        </div>
+        <div class="step rv">
+          <div class="step-num">2</div>
+          <h3>Paste a link or open a tool</h3>
+          <p>Paste a video URL to download it, or open any built-in tool from the menu — converter, screenshot, recorder, and more.</p>
+        </div>
+        <div class="step rv">
+          <div class="step-num">3</div>
+          <h3>Done — files saved to your folders</h3>
+          <p>Videos, audio, and files are auto-organized into neat folders. Screenshots and recordings save instantly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES DETAIL — explains each workflow -->
+  <section id="features" class="sec-gray">
+    <div class="wrap">
+      <div class="sec-head centered rv">
+        <h2>What's inside each workflow</h2>
+        <p>Each mode is built for a specific task — here's what you get.</p>
+      </div>
+      <div class="feat-grid">
+        <div class="feat rv">
+          <div class="feat-top">
+            <span class="feat-dot fd-blue"></span>
+            <h3>Video &amp; Audio Downloads</h3>
+          </div>
+          <p>Download from many public video sites using <code>yt-dlp</code> under the hood. You just paste a link.</p>
+          <ul>
+            <li>Choose video quality and audio bitrate</li>
+            <li>Download full playlists with a file limit</li>
+            <li>Clipboard auto-detects supported links</li>
+            <li>Output sorted into video/, audio/, playlists/</li>
+          </ul>
+        </div>
+        <div class="feat rv">
+          <div class="feat-top">
+            <span class="feat-dot fd-amber"></span>
+            <h3>Download List (IDM-style)</h3>
+          </div>
+          <p>For direct file links — .mp4, .mp3, .zip, .exe, images, archives. Works like Internet Download Manager.</p>
+          <ul>
+            <li>Queue multiple downloads at once</li>
+            <li>Pause, resume, and cancel anytime</li>
+            <li>Replace broken links on failed items</li>
+            <li>Persistent history across sessions</li>
+          </ul>
+        </div>
+        <div class="feat rv">
+          <div class="feat-top">
+            <span class="feat-dot fd-violet"></span>
+            <h3>Video Converter &amp; BG Remover</h3>
+          </div>
+          <p>Two processing tools that share the same FFmpeg engine, managed automatically.</p>
+          <ul>
+            <li>Batch convert videos with quality presets</li>
+            <li>Remove image backgrounds with AI (rembg)</li>
+            <li>Preview cutouts and export transparent PNG</li>
+            <li>FFmpeg installs and updates itself</li>
+          </ul>
+        </div>
+        <div class="feat rv">
+          <div class="feat-top">
+            <span class="feat-dot fd-green"></span>
+            <h3>YScreenshot &amp; YScreenRecorder</h3>
+          </div>
+          <p>Built-in capture tools — no need to install separate screenshot or recording software.</p>
+          <ul>
+            <li>Select a region or capture full screen</li>
+            <li>Annotate screenshots before saving</li>
+            <li>Record with a transparent floating HUD</li>
+            <li>Pause, resume, and auto-open output folder</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ALL 6 TOOLS — quick strip -->
+  <section id="tools">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <h2>All 6 tools included</h2>
+        <p>Every tool launches from one app — menu bar, system tray, or keyboard shortcut.</p>
+      </div>
+      <div class="tools-strip">
+        <div class="ts rv">
+          <span class="ts-icon">📦</span>
+          <h4>Media Downloader</h4>
+          <p>Main hub</p>
+        </div>
+        <div class="ts rv">
+          <span class="ts-icon">📋</span>
+          <h4>Download List</h4>
+          <p>File queue</p>
+        </div>
+        <div class="ts rv">
+          <span class="ts-icon">🔄</span>
+          <h4>Video Converter</h4>
+          <p>Format conversion</p>
+        </div>
+        <div class="ts rv">
+          <span class="ts-icon">✂️</span>
+          <h4>BG Remover</h4>
+          <p>AI background cut</p>
+        </div>
+        <div class="ts rv">
+          <span class="ts-icon">📸</span>
+          <h4>YScreenshot</h4>
+          <p>Screen capture</p>
+        </div>
+        <div class="ts rv">
+          <span class="ts-icon">🎥</span>
+          <h4>YScreenRecorder</h4>
+          <p>Screen recording</p>
+        </div>
+      </div>
+
+      <!-- Shortcuts -->
+      <div class="sc-box rv">
+        <div class="sc-head">Windows keyboard shortcuts</div>
+        <table>
+          <tr><td><kbd>Ctrl+Shift+V</kbd></td><td>Open Video Converter</td></tr>
+          <tr><td><kbd>Ctrl+Shift+B</kbd></td><td>Open BG Remover</td></tr>
+          <tr><td><kbd>Ctrl+Shift+Y</kbd></td><td>Take a screenshot</td></tr>
+          <tr><td><kbd>Ctrl+Shift+R</kbd></td><td>Start screen recording</td></tr>
+          <tr><td><kbd>Ctrl+Shift+P</kbd></td><td>Pause / resume recording</td></tr>
+          <tr><td><kbd>Ctrl+Shift+S</kbd></td><td>Finish &amp; save recording</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD — clear options -->
+  <section id="download" class="sec-gray">
+    <div class="wrap">
+      <div class="sec-head rv">
+        <h2>Download &amp; get started</h2>
+        <p>Choose your platform. Everything is bundled — no extra setup needed.</p>
+      </div>
+      <div class="dl-row">
+        <div class="dl-card dl-highlight rv">
+          <h3>⊞ Windows</h3>
+          <p>Download <code>MediaDownloader_Setup.exe</code> from GitHub Releases. It installs a standalone bundle with all 6 tools, bundled assets, <code>app_flags.json</code>, and auto-managed FFmpeg. Supports silent background updates when a newer installer is published.</p>
+          <a class="btn btn-blue btn-sm" href="https://github.com/needyamin/media-downloader/releases/latest" target="_blank" rel="noreferrer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download for Windows
+          </a>
+        </div>
+        <div class="dl-card rv">
+          <h3>🐧 Linux</h3>
+          <p>Download <code>Media-Downloader-x86_64.AppImage</code>, run <code>chmod +x</code>, then launch. For full screenshot/recorder support, install host packages such as <code>ffmpeg</code>, <code>python3-tk</code>, <code>xclip</code>, <code>wl-clipboard</code>, <code>grim</code>, and <code>scrot</code>.</p>
+          <a class="btn btn-soft btn-sm" href="https://github.com/needyamin/media-downloader/releases/latest" target="_blank" rel="noreferrer">Download AppImage</a>
+        </div>
+        <div class="dl-card rv">
+          <h3>🛠 Build from source</h3>
+          <p>Clone the repo, then install deps and run the hub:</p>
+          <p style="margin-top:8px;font-size:.8rem;line-height:1.7"><code>pip install -r src/desktop_tools/app/requirements.txt</code><br><code>python run.py</code></p>
+          <p style="margin-top:8px;font-size:.82rem">Windows installer build (Nuitka standalone + Inno Setup 6): <code>python src/desktop_tools/app/nutika_build.py</code>. Python <strong>3.12–3.13</strong> is recommended for Nuitka.</p>
+          <a class="btn btn-ghost btn-sm" href="https://github.com/needyamin/media-downloader#installation" target="_blank" rel="noreferrer">Full README guide</a>
+        </div>
+        <div class="dl-card rv">
+          <h3>⚙ Configuration</h3>
+          <p>Edit <code>app_flags.json</code> to toggle debug logging, block specific domains, or adjust clipboard monitoring. Optional SignPath for Windows code signing.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="foot">
+    <div class="wrap">
+      <div>
+        <p class="foot-brand">Media Downloader</p>
+        <div class="foot-links">
+          <a href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">Releases</a><span class="dot">·</span>
+          <a href="https://github.com/needyamin/media-downloader/issues" target="_blank" rel="noreferrer">Issues</a><span class="dot">·</span>
+          <a href="https://github.com/needyamin/media-downloader#readme" target="_blank" rel="noreferrer">README</a><span class="dot">·</span>
+          <a href="https://github.com/needyamin" target="_blank" rel="noreferrer">Md Yamin Hossain</a><span class="dot">·</span>
+          <a href="https://inside.ansnew.com" target="_blank" rel="noreferrer">ANSNEW TECH</a>
+        </div>
+        <p class="foot-legal">Educational and personal use only. Do not download or redistribute content in violation of copyright or platform terms.</p>
+      </div>
+      <a class="btn btn-fill btn-sm" href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">Download now</a>
+    </div>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.getElementById('toggle').addEventListener('click', () => document.getElementById('menu').classList.toggle('open'));
+    document.querySelectorAll('#menu a').forEach(a => a.addEventListener('click', () => document.getElementById('menu').classList.remove('open')));
+    const io = new IntersectionObserver(entries => { entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('show'); }); }, { threshold: 0.1, rootMargin: '0px 0px -20px 0px' });
+    document.querySelectorAll('.rv').forEach(el => io.observe(el));
+  </script>
+
 </body>
 </html>

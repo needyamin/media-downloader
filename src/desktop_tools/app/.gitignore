@@ -1,6 +1,3 @@
+# Covered by repo-root .gitignore (src/desktop_tools/app/build/, dist/, etc.)
 __pycache__/
 *.py[cod]
-
-dist/
-build/**/work/
-*.log

@@ -871,20 +871,8 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self.update_idletasks()
         width = self.control_frame.winfo_reqwidth()
         height = self.control_frame.winfo_reqheight()
-
-        if self.selection_box is None:
-            x = max(8, (self.screen_width - width) // 2)
-            y = max(8, self.screen_height - height - 18)
-        else:
-            x0, y0, x1, y1 = self.selection_box
-            x = x0 + max(0, (x1 - x0 - width) // 2)
-            x = max(8, min(x, self.screen_width - width - 8))
-            y = y1 + 12
-            if y + height > self.screen_height - 8:
-                y = y0 - height - 12
-            if y < 8:
-                y = max(8, self.screen_height - height - 18)
-
+        x = max(8, (self.screen_width - width) // 2)
+        y = max(8, self.screen_height - height - 18)
         self.canvas.coords(self.control_window, x, y)
 
     def prepare_region_mode(self):
