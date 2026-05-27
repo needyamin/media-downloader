@@ -6,7 +6,7 @@ Open **Media Downloader** as the hub, then launch every other tool from the menu
 
 ## Application Preview
 
-![Image](https://github.com/user-attachments/assets/9be2138d-cb43-425d-b8f9-a3c53309076f)
+![Image](https://github.com/user-attachments/assets/311e27ab-fda2-4234-98a8-d7fef466579e)
 
 ---
 
