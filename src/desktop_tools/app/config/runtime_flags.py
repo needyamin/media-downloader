@@ -46,6 +46,12 @@ DEFAULT_APP_FLAGS = {
         "screenshot": {},
         "screen_recorder": {},
     },
+    "updates": {
+        "source_auto_pull": True,
+        "source_auto_restart_after_pull": False,
+        "source_remote": "origin",
+        "source_branch": "auto",
+    },
 }
 
 

@@ -2828,6 +2828,114 @@ def compare_versions(v1, v2):
         print(f"Error comparing versions: {e}")
         return False
 
+def get_source_update_settings():
+    """Read source-mode updater settings from app flags."""
+    updates = APP_FLAGS.get("updates", {}) if isinstance(APP_FLAGS, dict) else {}
+    if not isinstance(updates, dict):
+        updates = {}
+    return {
+        "source_auto_pull": bool(updates.get("source_auto_pull", True)),
+        "source_auto_restart_after_pull": bool(updates.get("source_auto_restart_after_pull", False)),
+        "source_remote": str(updates.get("source_remote", "origin") or "origin").strip(),
+        "source_branch": str(updates.get("source_branch", "auto") or "auto").strip(),
+    }
+
+def run_git_command(args, cwd, timeout=60):
+    """Run a git command and return CompletedProcess."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+def restart_source_app():
+    """Restart the source app process with the current CLI args."""
+    try:
+        target_script = Path(sys.argv[0]).resolve() if sys.argv else Path(__file__).resolve()
+        launch_args = [sys.executable, str(target_script), *sys.argv[1:]]
+        subprocess.Popen(launch_args, cwd=str(get_project_root()))
+        ui_queue.put(lambda: root.after(400, root.quit))
+        return True
+    except Exception as restart_error:
+        app_update_log(f"Could not restart automatically: {restart_error}")
+        return False
+
+def check_and_apply_source_git_update(user_initiated=False):
+    """Check git remote and fast-forward the local source checkout in background."""
+    settings = get_source_update_settings()
+    if not settings["source_auto_pull"] and not user_initiated:
+        app_update_log("Source auto-pull is disabled in app_flags.json.")
+        return False
+
+    repo_root = get_project_root()
+    if not (repo_root / ".git").exists():
+        app_update_log("Source auto-update skipped: project is not a git checkout.")
+        return False
+
+    git_available = shutil.which("git")
+    if not git_available:
+        app_update_log("Source auto-update skipped: git is not installed.")
+        if user_initiated:
+            show_error_threadsafe("Git Not Found", "Git is required for source auto-update but was not found on PATH.")
+        return False
+
+    try:
+        status = run_git_command(["status", "--porcelain"], repo_root)
+        if status.returncode != 0:
+            raise RuntimeError(status.stderr.strip() or status.stdout.strip() or "git status failed")
+        if (status.stdout or "").strip():
+            app_update_log("Source auto-update skipped: local repository has uncommitted changes.")
+            if user_initiated:
+                show_info_threadsafe("Source Update", "Skipped because local git changes are present.")
+            return False
+
+        branch = settings["source_branch"]
+        if branch.lower() == "auto":
+            branch_proc = run_git_command(["rev-parse", "--abbrev-ref", "HEAD"], repo_root)
+            if branch_proc.returncode != 0:
+                raise RuntimeError(branch_proc.stderr.strip() or "Could not detect current branch")
+            branch = (branch_proc.stdout or "").strip() or "main"
+
+        remote = settings["source_remote"] or "origin"
+        app_update_log(f"Checking git updates from {remote}/{branch}...")
+        fetch_proc = run_git_command(["fetch", "--prune", remote, branch], repo_root, timeout=120)
+        if fetch_proc.returncode != 0:
+            raise RuntimeError(fetch_proc.stderr.strip() or "git fetch failed")
+
+        behind_proc = run_git_command(["rev-list", "--count", f"HEAD..{remote}/{branch}"], repo_root)
+        if behind_proc.returncode != 0:
+            raise RuntimeError(behind_proc.stderr.strip() or "Could not compare local and remote revisions")
+        behind_count = int((behind_proc.stdout or "0").strip() or "0")
+        if behind_count <= 0:
+            app_update_log("Source repository already up to date.")
+            if user_initiated:
+                show_info_threadsafe("No Updates", "Source repository is already up to date.")
+            return False
+
+        app_update_log(f"Pulling {behind_count} new commit(s) from {remote}/{branch}...")
+        set_status_threadsafe("Applying source update from git in background...")
+        pull_proc = run_git_command(["pull", "--ff-only", remote, branch], repo_root, timeout=180)
+        if pull_proc.returncode != 0:
+            raise RuntimeError(pull_proc.stderr.strip() or pull_proc.stdout.strip() or "git pull failed")
+
+        app_update_log("Source update applied successfully.")
+        set_status_threadsafe("Source update applied")
+        if settings["source_auto_restart_after_pull"]:
+            app_update_log("Restarting app to load new source update.")
+            if not restart_source_app():
+                show_info_threadsafe("Update Applied", "Source was updated. Please restart the app manually.")
+        else:
+            show_info_threadsafe("Update Applied", "Source code updated successfully. Restart the app to use new code.")
+        return True
+    except Exception as update_error:
+        app_update_log(f"Source auto-update error: {update_error}")
+        if user_initiated:
+            show_error_threadsafe("Source Update Failed", f"Could not update from git:\n{update_error}")
+        return False
+
 def check_updates_on_startup(user_initiated=False):
     """Check for app updates and install packaged releases in the background."""
     global FORCE_UPDATE_CHECK
@@ -2845,6 +2953,18 @@ def check_updates_on_startup(user_initiated=False):
             return False
 
         performed_check = True
+
+        if not is_packaged_runtime():
+            app_update_log("Checking source repository for updates...")
+            update_started = check_and_apply_source_git_update(user_initiated=user_initiated)
+            if performed_check:
+                update_check_timestamp()
+            if not update_started:
+                check_ffmpeg_update()
+            debug_log("Update check process completed.")
+            print("=== UPDATE CHECK PROCESS COMPLETED ===\n")
+            return update_started
+
         app_update_log("Checking GitHub for a newer application release...")
         latest_release = check_for_updates()
 
