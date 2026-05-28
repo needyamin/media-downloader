@@ -13,12 +13,16 @@ from pathlib import Path
 import time
 import traceback
 
+try:
+    from desktop_tools.app.app_windowing import ensure_src_on_path
+except Exception:
+    from app_windowing import ensure_src_on_path
+
 APP_DIR = Path(__file__).resolve().parent
-SRC_DIR = Path(__file__).resolve().parents[2]
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+SRC_DIR = ensure_src_on_path(__file__)
 
 from desktop_tools.shared.resources import apply_window_icon, center_window
+from desktop_tools.app.config.runtime_flags import APP_VERSION_BG_REMOVER, get_tool_theme
 
 MISSING_DEPENDENCIES = []
 DEPENDENCY_ERRORS = {}
@@ -46,35 +50,60 @@ except BaseException as exc:
     register_dependency_error("customtkinter", exc)
 
 # Constants for version checking
-CURRENT_VERSION = "1.0.0"  # Update this with your current version
+CURRENT_VERSION = APP_VERSION_BG_REMOVER
 GITHUB_API_URL = "https://api.github.com/repos/needyamin/img-background-remover/releases/latest"
 REPO_OWNER = "needyamin"
 REPO_NAME = "img-background-remover"
 APP_ID = "mycompany.backgroundremover.1.0"
 background_remover_window = None
 
-PRIMARY_BG = "#07111F"
-SURFACE_BG = "#0F1C2E"
-CARD_BG = "#132238"
-CARD_BORDER = "#243B5A"
-CANVAS_BG = "#091423"
-ACCENT = "#60A5FA"
-ACCENT_HOVER = "#3B82F6"
-SUCCESS = "#22C55E"
-SUCCESS_HOVER = "#16A34A"
-DANGER = "#EF4444"
-DANGER_HOVER = "#DC2626"
-SECONDARY_BUTTON = "#16263B"
-SECONDARY_BUTTON_HOVER = "#213552"
-SECONDARY_BUTTON_BORDER = "#345072"
-HEADER_BADGE_BG = "#102742"
-HEADER_BADGE_BORDER = "#2A4B73"
-TEXT_MAIN = "#F8FAFC"
-TEXT_MUTED = "#B6C2D5"
-TEXT_SOFT = "#7F91AB"
-DANGER_TEXT = "#FCA5A5"
-CHECKER_DARK = "#0C1526"
-CHECKER_LIGHT = "#172235"
+BACKGROUND_REMOVER_THEME_DEFAULTS = {
+    "PRIMARY_BG": "#07111F",
+    "SURFACE_BG": "#0F1C2E",
+    "CARD_BG": "#132238",
+    "CARD_BORDER": "#243B5A",
+    "CANVAS_BG": "#091423",
+    "ACCENT": "#60A5FA",
+    "ACCENT_HOVER": "#3B82F6",
+    "SUCCESS": "#22C55E",
+    "SUCCESS_HOVER": "#16A34A",
+    "DANGER": "#EF4444",
+    "DANGER_HOVER": "#DC2626",
+    "SECONDARY_BUTTON": "#16263B",
+    "SECONDARY_BUTTON_HOVER": "#213552",
+    "SECONDARY_BUTTON_BORDER": "#345072",
+    "HEADER_BADGE_BG": "#102742",
+    "HEADER_BADGE_BORDER": "#2A4B73",
+    "TEXT_MAIN": "#F8FAFC",
+    "TEXT_MUTED": "#B6C2D5",
+    "TEXT_SOFT": "#7F91AB",
+    "DANGER_TEXT": "#FCA5A5",
+    "CHECKER_DARK": "#0C1526",
+    "CHECKER_LIGHT": "#172235",
+}
+BACKGROUND_REMOVER_THEME = get_tool_theme("background_remover", BACKGROUND_REMOVER_THEME_DEFAULTS)
+PRIMARY_BG = BACKGROUND_REMOVER_THEME["PRIMARY_BG"]
+SURFACE_BG = BACKGROUND_REMOVER_THEME["SURFACE_BG"]
+CARD_BG = BACKGROUND_REMOVER_THEME["CARD_BG"]
+CARD_BORDER = BACKGROUND_REMOVER_THEME["CARD_BORDER"]
+CANVAS_BG = BACKGROUND_REMOVER_THEME["CANVAS_BG"]
+ACCENT = BACKGROUND_REMOVER_THEME["ACCENT"]
+ACCENT_HOVER = BACKGROUND_REMOVER_THEME["ACCENT_HOVER"]
+SUCCESS = BACKGROUND_REMOVER_THEME["SUCCESS"]
+SUCCESS_HOVER = BACKGROUND_REMOVER_THEME["SUCCESS_HOVER"]
+DANGER = BACKGROUND_REMOVER_THEME["DANGER"]
+DANGER_HOVER = BACKGROUND_REMOVER_THEME["DANGER_HOVER"]
+SECONDARY_BUTTON = BACKGROUND_REMOVER_THEME["SECONDARY_BUTTON"]
+SECONDARY_BUTTON_HOVER = BACKGROUND_REMOVER_THEME["SECONDARY_BUTTON_HOVER"]
+SECONDARY_BUTTON_BORDER = BACKGROUND_REMOVER_THEME["SECONDARY_BUTTON_BORDER"]
+HEADER_BADGE_BG = BACKGROUND_REMOVER_THEME["HEADER_BADGE_BG"]
+HEADER_BADGE_BORDER = BACKGROUND_REMOVER_THEME["HEADER_BADGE_BORDER"]
+TEXT_MAIN = BACKGROUND_REMOVER_THEME["TEXT_MAIN"]
+TEXT_MUTED = BACKGROUND_REMOVER_THEME["TEXT_MUTED"]
+TEXT_SOFT = BACKGROUND_REMOVER_THEME["TEXT_SOFT"]
+DANGER_TEXT = BACKGROUND_REMOVER_THEME["DANGER_TEXT"]
+CHECKER_DARK = BACKGROUND_REMOVER_THEME["CHECKER_DARK"]
+CHECKER_LIGHT = BACKGROUND_REMOVER_THEME["CHECKER_LIGHT"]
 
 def log(message):
     """Simple logging function"""
@@ -91,7 +120,9 @@ def compare_versions(version1, version2):
 
 def get_base_path():
     """Return the app base path for source and PyInstaller builds."""
-    return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    if getattr(sys, "_MEIPASS", None):
+        return sys._MEIPASS
+    return str(Path(__file__).resolve().parents[1])
 
 def is_packaged_runtime():
     """Return True when running from a packaged executable instead of source."""
@@ -315,37 +346,8 @@ class BackgroundRemoverApp:
             self.header_card,
             text="Background Remover Studio",
             text_color=TEXT_MAIN,
-            font=("Segoe UI", 28, "bold"),
-        ).grid(row=0, column=0, sticky="w", padx=24, pady=(22, 4))
-
-        ctk.CTkLabel(
-            self.header_card,
-            text="A cleaner, faster workspace for uploading, previewing, and exporting transparent cutouts.",
-            text_color=TEXT_MUTED,
-            font=("Segoe UI", 13),
-        ).grid(row=1, column=0, sticky="w", padx=24, pady=(0, 22))
-
-        self.badge_frame = ctk.CTkFrame(
-            self.header_card,
-            fg_color=HEADER_BADGE_BG,
-            corner_radius=999,
-            border_width=1,
-            border_color=HEADER_BADGE_BORDER,
-        )
-        self.badge_frame.grid(row=0, column=1, rowspan=2, sticky="e", padx=24, pady=24)
-
-        ctk.CTkLabel(
-            self.badge_frame,
-            text="AI Cutout Workspace",
-            text_color=ACCENT,
-            font=("Segoe UI", 11, "bold"),
-        ).pack(padx=18, pady=(10, 2))
-        ctk.CTkLabel(
-            self.badge_frame,
-            text="Cleaner buttons and preview flow",
-            text_color=TEXT_MUTED,
-            font=("Segoe UI", 10),
-        ).pack(padx=18, pady=(0, 10))
+            font=("Segoe UI", 26, "bold"),
+        ).grid(row=0, column=0, sticky="w", padx=24, pady=(20, 8))
 
         self.toolbar_card = ctk.CTkFrame(
             self.main_frame,
@@ -357,7 +359,7 @@ class BackgroundRemoverApp:
         self.toolbar_card.pack(fill='x', pady=(18, 18))
 
         self.toolbar_row = ctk.CTkFrame(self.toolbar_card, fg_color="transparent")
-        self.toolbar_row.pack(fill='x', padx=20, pady=(20, 10))
+        self.toolbar_row.pack(fill='x', padx=20, pady=(18, 10))
 
         self.action_buttons = ctk.CTkFrame(self.toolbar_row, fg_color="transparent")
         self.action_buttons.pack(side='left')
@@ -367,7 +369,7 @@ class BackgroundRemoverApp:
             text="Choose Image",
             command=self.upload_image,
             variant="primary",
-            width=160,
+            width=150,
         )
         self.upload_button.pack(side='left', padx=(0, 12))
 
@@ -376,7 +378,7 @@ class BackgroundRemoverApp:
             text="Save PNG",
             command=self.save_processed_image,
             variant="success",
-            width=140,
+            width=130,
         )
         self.save_button.pack(side='left', padx=(0, 12))
 
@@ -385,7 +387,7 @@ class BackgroundRemoverApp:
             text="Reset Workspace",
             command=self.clear_images,
             variant="danger-soft",
-            width=156,
+            width=146,
         )
         self.clear_button.pack(side='left')
 
@@ -395,13 +397,7 @@ class BackgroundRemoverApp:
             length=220,
             style="Modern.Horizontal.TProgressbar",
         )
-        self.progress_bar.pack(side='right', padx=(16, 0), pady=8)
-
-        self.toolbar_chips = ctk.CTkFrame(self.toolbar_card, fg_color="transparent")
-        self.toolbar_chips.pack(fill='x', padx=22, pady=(0, 12))
-        self._create_toolbar_chip(self.toolbar_chips, "Smart preview fit")
-        self._create_toolbar_chip(self.toolbar_chips, "Transparent PNG export")
-        self._create_toolbar_chip(self.toolbar_chips, "Fast local workflow")
+        self.progress_bar.pack(side='right', padx=(12, 0), pady=8)
 
         ctk.CTkLabel(
             self.toolbar_card,
@@ -409,17 +405,8 @@ class BackgroundRemoverApp:
             text_color=TEXT_MAIN,
             anchor="w",
             justify="left",
-            font=("Segoe UI", 13, "bold"),
-        ).pack(fill='x', padx=22, pady=(0, 4))
-
-        ctk.CTkLabel(
-            self.toolbar_card,
-            text="Supports PNG, JPG, JPEG, BMP, and WEBP files. Export stays in transparent PNG format.",
-            text_color=TEXT_SOFT,
-            anchor="w",
-            justify="left",
-            font=("Segoe UI", 11),
-        ).pack(fill='x', padx=22, pady=(0, 18))
+            font=("Segoe UI", 12, "bold"),
+        ).pack(fill='x', padx=22, pady=(0, 14))
         self._set_save_button_enabled(False)
 
         self.image_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
@@ -444,51 +431,8 @@ class BackgroundRemoverApp:
         )
         self.removed_canvas = self.processed_card["canvas"]
 
-        self.footer_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.footer_frame.pack(fill='x', pady=(16, 0))
-
-        self.center_frame = tk.Frame(self.footer_frame, bg=PRIMARY_BG)
-        self.center_frame.pack(expand=True)
-
-        self.credit_prefix = tk.Label(
-            self.center_frame,
-            text="Created by ",
-            bg=PRIMARY_BG,
-            fg=TEXT_SOFT,
-            font=("Segoe UI", 10),
-        )
-        self.credit_prefix.pack(side='left', pady=2)
-
-        self.name_link = tk.Label(
-            self.center_frame,
-            text="Md. Yamin Hossain",
-            bg=PRIMARY_BG,
-            fg=ACCENT,
-            font=("Segoe UI", 10, "underline"),
-            cursor="hand2",
-        )
-        self.name_link.pack(side='left', pady=2)
-        self.name_link.bind("<Button-1>", lambda e: self.open_link("https://needyamin.github.io"))
-
-        self.separator = tk.Label(
-            self.center_frame,
-            text="  |  ",
-            bg=PRIMARY_BG,
-            fg=TEXT_SOFT,
-            font=("Segoe UI", 10),
-        )
-        self.separator.pack(side='left', pady=2)
-
-        self.github_link = tk.Label(
-            self.center_frame,
-            text="GitHub",
-            bg=PRIMARY_BG,
-            fg=ACCENT,
-            font=("Segoe UI", 10, "underline"),
-            cursor="hand2",
-        )
-        self.github_link.pack(side='left', pady=2)
-        self.github_link.bind("<Button-1>", lambda e: self.open_link("https://github.com/needyamin/img-background-remover"))
+        self.footer_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent", height=8)
+        self.footer_frame.pack(fill='x', pady=(10, 0))
 
     def _create_preview_card(self, parent, title, details_var, column):
         card = ctk.CTkFrame(

@@ -42,8 +42,16 @@ desktop.ini
 # -----------------------------------------------------------------------------
 # Desktop app packaging (Nuitka / PyInstaller / Linux AppImage)
 # -----------------------------------------------------------------------------
+# Legacy in-app build folders (kept ignored during migration)
 src/desktop_tools/app/build/
 src/desktop_tools/app/dist/
+
+# Current build temp outputs under release/
+release/**/build/
+release/**/pyinstaller-work/
+release/**/pyinstaller-dist/
+release/**/*.AppDir/
+release/**/appimagetool-*.AppImage
 
 # Nuitka / PyInstaller intermediate folders (e.g. media_download.build, *.dist)
 *.build/
@@ -60,7 +68,7 @@ release/linux/
 # -----------------------------------------------------------------------------
 # Build diagnostics and temp files
 # -----------------------------------------------------------------------------
-nuitka-crash-report.xml
+nuitka-crash-report*.xml
 *.tmp
 *.bak
 *.part

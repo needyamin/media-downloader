@@ -10,21 +10,38 @@ import subprocess
 import sys
 import time
 
-from build_manifest import (
-    APP_DIR,
-    EXCLUDED_IMPORTS,
-    ICON_PATH,
-    INNO_SCRIPT,
-    MAIN_SCRIPT,
-    REPO_ROOT,
-    REQUIREMENTS_FILE,
-    REQUIRED_PACKAGES,
-    REQUIRED_PACKAGE_DATA,
-    nuitka_data_file_arguments,
-    print_bundle_summary,
-    required_include_modules,
-    validate_source_tree,
-)
+try:
+    from .build_manifest import (
+        APP_DIR,
+        EXCLUDED_IMPORTS,
+        ICON_PATH,
+        INNO_SCRIPT,
+        MAIN_SCRIPT,
+        REPO_ROOT,
+        REQUIREMENTS_FILE,
+        REQUIRED_PACKAGES,
+        REQUIRED_PACKAGE_DATA,
+        nuitka_data_file_arguments,
+        print_bundle_summary,
+        required_include_modules,
+        validate_source_tree,
+    )
+except ImportError:
+    from build_manifest import (
+        APP_DIR,
+        EXCLUDED_IMPORTS,
+        ICON_PATH,
+        INNO_SCRIPT,
+        MAIN_SCRIPT,
+        REPO_ROOT,
+        REQUIREMENTS_FILE,
+        REQUIRED_PACKAGES,
+        REQUIRED_PACKAGE_DATA,
+        nuitka_data_file_arguments,
+        print_bundle_summary,
+        required_include_modules,
+        validate_source_tree,
+    )
 
 
 APP_NAME = "Media Downloader"
@@ -32,7 +49,7 @@ AUTHOR = "Yamin Hossain"
 DESCRIPTION = "Media Downloader with integrated desktop tools"
 RELEASE_DIR = REPO_ROOT / "release"
 WINDOWS_RELEASE_DIR = RELEASE_DIR / "windows"
-BUILD_DIR = APP_DIR / "build" / "nuitka"
+BUILD_DIR = WINDOWS_RELEASE_DIR / "build" / "nuitka"
 BUILD_RUN_ID = f"{int(time.time())}-{os.getpid()}"
 WINDOWS_BUILD_OUTPUT_DIR = BUILD_DIR / "runs" / BUILD_RUN_ID / "windows-output"
 OUTPUT_EXE_NAME = "Media-Downloader.exe"

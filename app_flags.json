@@ -7,5 +7,31 @@
   "progress_log_min_interval_ms": 1500,
   "progress_ui_min_interval_ms": 250,
   "max_log_lines": 400,
-  "disabled_domains": ["youtubes.com", "facebooks.com"]
+  "disabled_domains": ["youtubes.com", "facebooks.com"],
+  "hotkeys": {
+    "converter": "Ctrl+Shift+V",
+    "background_remover": "Ctrl+Shift+B",
+    "screenshot": "Ctrl+Shift+Y",
+    "screen_recorder": "Ctrl+Shift+R",
+    "record_pause": "Ctrl+Shift+P",
+    "record_finish": "Ctrl+Shift+S"
+  },
+  "versions": {
+    "media_downloader": "2.0.0",
+    "background_remover": "1.0.0"
+  },
+  "paths": {
+    "download_root_dirname": "Yamin Downloader",
+    "screen_recorder_output_dirname": "YScreenRecorder"
+  },
+  "ui": {
+    "screenshot_dim_alpha": 0.42
+  },
+  "themes": {
+    "media_downloader": {},
+    "converter": {},
+    "background_remover": {},
+    "screenshot": {},
+    "screen_recorder": {}
+  }
 }

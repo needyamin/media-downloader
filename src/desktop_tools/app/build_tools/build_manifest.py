@@ -6,8 +6,8 @@ import re
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-APP_DIR = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[4]
+APP_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = REPO_ROOT / "src"
 SHARED_DIR = SRC_DIR / "desktop_tools" / "shared"
 APP_PACKAGE = "desktop_tools.app"
@@ -24,6 +24,7 @@ INNO_SCRIPT = APP_DIR / "installer" / "setup.iss"
 BUILD_SCRIPT_STEMS = frozenset(
     {
         "nutika_build",
+        "nuitka_build",
         "linux_appimage_build",
         "build_manifest",
         "__init__",
@@ -129,10 +130,11 @@ LINUX_COLLECT_SUBMODULE_PACKAGES = [
 def discover_app_module_names() -> list[str]:
     """Return desktop_tools.app.* modules for every bundled tool script."""
     modules: list[str] = []
-    for script_path in sorted(APP_DIR.glob("*_app.py")):
+    for script_path in sorted(APP_DIR.rglob("*_app.py")):
         if script_path.stem in BUILD_SCRIPT_STEMS:
             continue
-        modules.append(f"{APP_PACKAGE}.{script_path.stem}")
+        relative_module = script_path.relative_to(SRC_DIR).with_suffix("")
+        modules.append(".".join(relative_module.parts))
     return modules
 
 
@@ -157,7 +159,9 @@ def discover_asset_names_from_source() -> set[str]:
     """Collect asset filenames referenced via get_asset_path(...) in app sources."""
     names: set[str] = set()
     pattern = re.compile(r"""get_asset_path\(\s*['"]([^'"]+)['"]\s*\)""")
-    for script_path in APP_DIR.glob("*.py"):
+    for script_path in APP_DIR.rglob("*.py"):
+        if "build_tools" in script_path.parts:
+            continue
         if script_path.stem in BUILD_SCRIPT_STEMS:
             continue
         try:
@@ -276,6 +280,11 @@ def _dedupe_preserve_order(items: list[str]) -> list[str]:
     return unique
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Validate package inputs and print the effective bundle manifest."""
     validate_source_tree()
     print_bundle_summary()
+
+
+if __name__ == "__main__":
+    main()

@@ -17,11 +17,15 @@ try:
 except Exception:
     win32clipboard = None
 
-SRC_DIR = Path(__file__).resolve().parents[2]
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+try:
+    from desktop_tools.app.app_windowing import cleanup_hidden_root, create_hidden_root, ensure_src_on_path
+except Exception:
+    from app_windowing import cleanup_hidden_root, create_hidden_root, ensure_src_on_path
+
+SRC_DIR = ensure_src_on_path(__file__)
 
 from desktop_tools.shared.capture_support import capture_desktop_snapshot, copy_image_to_linux_clipboard
+from desktop_tools.app.config.runtime_flags import SCREENSHOT_DIM_ALPHA, get_tool_theme
 
 TOOL_SPECS = {
     "pen": {"icon": "✎", "label": "Pen"},
@@ -50,14 +54,24 @@ QUICK_COLORS = ["#FF4D6D", "#F97316", "#FACC15", "#22C55E", "#38BDF8", "#8B5CF6"
 STROKE_WIDTHS = [3, 6, 10]
 TEXT_SIZES = [16, 22, 30, 40]
 
-SCREEN_DIM_ALPHA = 0.42
-HUD_BG = "#0B1220"
-HUD_BORDER = "#253348"
-HUD_ACTIVE = "#38BDF8"
-HUD_PANEL = "#101826"
-HUD_TEXT = "#F8FAFC"
-HUD_MUTED = "#94A3B8"
-SELECTION_OUTLINE = "#38BDF8"
+SCREENSHOT_THEME_DEFAULTS = {
+    "HUD_BG": "#0B1220",
+    "HUD_BORDER": "#253348",
+    "HUD_ACTIVE": "#38BDF8",
+    "HUD_PANEL": "#101826",
+    "HUD_TEXT": "#F8FAFC",
+    "HUD_MUTED": "#94A3B8",
+    "SELECTION_OUTLINE": "#38BDF8",
+}
+SCREENSHOT_THEME = get_tool_theme("screenshot", SCREENSHOT_THEME_DEFAULTS)
+SCREEN_DIM_ALPHA = SCREENSHOT_DIM_ALPHA
+HUD_BG = SCREENSHOT_THEME["HUD_BG"]
+HUD_BORDER = SCREENSHOT_THEME["HUD_BORDER"]
+HUD_ACTIVE = SCREENSHOT_THEME["HUD_ACTIVE"]
+HUD_PANEL = SCREENSHOT_THEME["HUD_PANEL"]
+HUD_TEXT = SCREENSHOT_THEME["HUD_TEXT"]
+HUD_MUTED = SCREENSHOT_THEME["HUD_MUTED"]
+SELECTION_OUTLINE = SCREENSHOT_THEME["SELECTION_OUTLINE"]
 
 screenshot_window = None
 
@@ -66,11 +80,7 @@ class ScreenshotOverlay(tk.Toplevel):
     """A compact YScreenshot overlay for selecting and annotating screenshots."""
 
     def __init__(self, parent=None):
-        self._standalone_root = None
-        if parent is None:
-            self._standalone_root = tk.Tk()
-            self._standalone_root.withdraw()
-            parent = self._standalone_root
+        parent, self._standalone_root = create_hidden_root(parent)
 
         super().__init__(parent)
         self.parent_window = parent if isinstance(parent, (tk.Tk, tk.Toplevel)) else None
@@ -1076,10 +1086,7 @@ class ScreenshotOverlay(tk.Toplevel):
             if screenshot_window is self:
                 screenshot_window = None
             if self._standalone_root is not None:
-                try:
-                    self._standalone_root.destroy()
-                except Exception:
-                    pass
+                cleanup_hidden_root(self._standalone_root)
 
 
 def open_screenshot_studio(parent=None):

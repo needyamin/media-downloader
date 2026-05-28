@@ -9,20 +9,36 @@ import subprocess
 import sys
 import urllib.request
 
-from build_manifest import (
-    APP_DIR,
-    ICON_PATH,
-    LINUX_COLLECT_ALL_PACKAGES,
-    LINUX_COLLECT_SUBMODULE_PACKAGES,
-    LINUX_EXCLUDED_MODULES,
-    MAIN_SCRIPT,
-    REPO_ROOT,
-    REQUIREMENTS_FILE,
-    linux_pyinstaller_data_arguments,
-    print_bundle_summary,
-    required_include_modules,
-    validate_source_tree,
-)
+try:
+    from .build_manifest import (
+        APP_DIR,
+        ICON_PATH,
+        LINUX_COLLECT_ALL_PACKAGES,
+        LINUX_COLLECT_SUBMODULE_PACKAGES,
+        LINUX_EXCLUDED_MODULES,
+        MAIN_SCRIPT,
+        REPO_ROOT,
+        REQUIREMENTS_FILE,
+        linux_pyinstaller_data_arguments,
+        print_bundle_summary,
+        required_include_modules,
+        validate_source_tree,
+    )
+except ImportError:
+    from build_manifest import (
+        APP_DIR,
+        ICON_PATH,
+        LINUX_COLLECT_ALL_PACKAGES,
+        LINUX_COLLECT_SUBMODULE_PACKAGES,
+        LINUX_EXCLUDED_MODULES,
+        MAIN_SCRIPT,
+        REPO_ROOT,
+        REQUIREMENTS_FILE,
+        linux_pyinstaller_data_arguments,
+        print_bundle_summary,
+        required_include_modules,
+        validate_source_tree,
+    )
 
 
 RELEASE_DIR = REPO_ROOT / "release"
@@ -34,7 +50,7 @@ EXECUTABLE_NAME = "Media-Downloader"
 APPIMAGE_NAME = "Media-Downloader-x86_64.AppImage"
 APPIMAGETOOL_NAME = "appimagetool-x86_64.AppImage"
 APPIMAGETOOL_URL = "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
-BUILD_VENV_DIR = APP_DIR / "build" / "linux-appimage-venv"
+BUILD_VENV_DIR = LINUX_RELEASE_DIR / "build" / "linux-appimage-venv"
 APP_DESKTOP_ID = "com.needyamin.MediaDownloader"
 
 

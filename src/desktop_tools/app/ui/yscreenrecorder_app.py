@@ -24,35 +24,55 @@ except Exception:
     pystray = None
     tray_item = None
 
-SRC_DIR = Path(__file__).resolve().parents[2]
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+try:
+    from desktop_tools.app.app_windowing import cleanup_hidden_root, create_hidden_root, ensure_src_on_path
+except Exception:
+    from app_windowing import cleanup_hidden_root, create_hidden_root, ensure_src_on_path
+
+SRC_DIR = ensure_src_on_path(__file__)
 
 from desktop_tools.shared.ffmpeg import ensure_managed_ffmpeg, update_managed_ffmpeg_if_needed
 from desktop_tools.shared.capture_support import capture_desktop_snapshot, get_linux_display_name, is_linux_wayland, is_linux_x11
 from desktop_tools.shared.resources import apply_window_icon
+from desktop_tools.app.config.runtime_flags import SCREEN_RECORDER_OUTPUT_DIRNAME, get_tool_theme
+from desktop_tools.app.platform.hotkeys import (
+    WM_HOTKEY,
+    WM_QUIT,
+    YSCREENRECORDER_FINISH_HOTKEY_ID,
+    YSCREENRECORDER_FINISH_HOTKEY_LABEL,
+    YSCREENRECORDER_FINISH_HOTKEY_MODIFIERS,
+    YSCREENRECORDER_FINISH_HOTKEY_VK,
+    YSCREENRECORDER_PAUSE_HOTKEY_ID,
+    YSCREENRECORDER_PAUSE_HOTKEY_LABEL,
+    YSCREENRECORDER_PAUSE_HOTKEY_MODIFIERS,
+    YSCREENRECORDER_PAUSE_HOTKEY_VK,
+)
 
 IS_WINDOWS = os.name == "nt"
 IS_LINUX = sys.platform.startswith("linux")
-WM_HOTKEY = 0x0312
-WM_QUIT = 0x0012
-MOD_CONTROL = 0x0002
-MOD_SHIFT = 0x0004
-MOD_NOREPEAT = 0x4000
-YSCREENRECORDER_FINISH_HOTKEY_ID = 0x5953
-YSCREENRECORDER_FINISH_HOTKEY_LABEL = "Ctrl+Shift+S"
-YSCREENRECORDER_PAUSE_HOTKEY_ID = 0x5950
-YSCREENRECORDER_PAUSE_HOTKEY_LABEL = "Ctrl+Shift+P"
-TEXT_MAIN = "#F8FAFC"
-TEXT_MUTED = "#94A3B8"
-TEXT_SOFT = "#7F91AB"
-PANEL_BG = "#0F172A"
-PANEL_ALT = "#132238"
-PANEL_CHIP = "#172235"
-PANEL_BORDER = "#2B405E"
-ACCENT = "#38BDF8"
-SUCCESS = "#22C55E"
-DANGER = "#F43F5E"
+SCREENRECORDER_THEME_DEFAULTS = {
+    "TEXT_MAIN": "#F8FAFC",
+    "TEXT_MUTED": "#94A3B8",
+    "TEXT_SOFT": "#7F91AB",
+    "PANEL_BG": "#0F172A",
+    "PANEL_ALT": "#132238",
+    "PANEL_CHIP": "#172235",
+    "PANEL_BORDER": "#2B405E",
+    "ACCENT": "#38BDF8",
+    "SUCCESS": "#22C55E",
+    "DANGER": "#F43F5E",
+}
+SCREENRECORDER_THEME = get_tool_theme("screen_recorder", SCREENRECORDER_THEME_DEFAULTS)
+TEXT_MAIN = SCREENRECORDER_THEME["TEXT_MAIN"]
+TEXT_MUTED = SCREENRECORDER_THEME["TEXT_MUTED"]
+TEXT_SOFT = SCREENRECORDER_THEME["TEXT_SOFT"]
+PANEL_BG = SCREENRECORDER_THEME["PANEL_BG"]
+PANEL_ALT = SCREENRECORDER_THEME["PANEL_ALT"]
+PANEL_CHIP = SCREENRECORDER_THEME["PANEL_CHIP"]
+PANEL_BORDER = SCREENRECORDER_THEME["PANEL_BORDER"]
+ACCENT = SCREENRECORDER_THEME["ACCENT"]
+SUCCESS = SCREENRECORDER_THEME["SUCCESS"]
+DANGER = SCREENRECORDER_THEME["DANGER"]
 
 yscreenrecorder_window = None
 last_recording_path: Path | None = None
@@ -67,12 +87,12 @@ def _default_recording_dir() -> Path:
     ]
     for base in candidates:
         try:
-            target = base / "YScreenRecorder"
+            target = base / SCREEN_RECORDER_OUTPUT_DIRNAME
             target.mkdir(parents=True, exist_ok=True)
             return target
         except Exception:
             continue
-    target = Path.cwd() / "YScreenRecorder"
+    target = Path.cwd() / SCREEN_RECORDER_OUTPUT_DIRNAME
     target.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -97,11 +117,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
     """Overlay-based recorder with transparent area selection and bottom controls."""
 
     def __init__(self, parent=None):
-        self._standalone_root = None
-        if parent is None:
-            self._standalone_root = tk.Tk()
-            self._standalone_root.withdraw()
-            parent = self._standalone_root
+        parent, self._standalone_root = create_hidden_root(parent)
 
         super().__init__(parent)
         self.parent_window = parent if isinstance(parent, (tk.Tk, tk.Toplevel)) else None
@@ -171,6 +187,13 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self.recording_hud_pause_btn = None
         self.recording_hud_finish_btn = None
         self.recording_hud_open_folder_btn = None
+        self._controls_manual_pos = None
+        self._controls_drag_state = None
+        self._hud_manual_pos = None
+        self._hud_drag_state = None
+        self._controls_minimized = False
+        self.mini_timer_frame = None
+        self.mini_timer_window = None
 
         self.withdraw()
         self.overrideredirect(True)
@@ -238,8 +261,8 @@ class YScreenRecorderOverlay(tk.Toplevel):
             highlightbackground=PANEL_BORDER,
             highlightthickness=1,
             bd=0,
-            padx=12,
-            pady=12,
+            padx=10,
+            pady=10,
         )
 
         top_row = tk.Frame(self.control_frame, bg=PANEL_BG)
@@ -255,20 +278,24 @@ class YScreenRecorderOverlay(tk.Toplevel):
         tk.Label(timer_shell, textvariable=self.timer_state_var, bg=PANEL_CHIP, fg=ACCENT, font=("Segoe UI", 7, "bold")).pack(anchor="center", padx=12, pady=(6, 0))
         tk.Label(timer_shell, textvariable=self.timer_var, bg=PANEL_CHIP, fg=TEXT_MAIN, font=("Consolas", 14, "bold")).pack(anchor="center", padx=12, pady=(0, 6))
 
-        info_row = tk.Frame(self.control_frame, bg=PANEL_BG)
-        info_row.pack(fill="x", pady=(10, 0))
-        self._info_chip(info_row, self.mode_var).pack(side="left", padx=(0, 6))
-        self._info_chip(info_row, self.summary_var).pack(side="left", padx=(0, 6))
-        self._info_chip(info_row, self.last_recording_var).pack(side="left")
+        tk.Label(
+            self.control_frame,
+            textvariable=self.summary_var,
+            bg=PANEL_BG,
+            fg=TEXT_MUTED,
+            font=("Segoe UI", 8),
+            justify="left",
+            wraplength=540,
+            anchor="w",
+        ).pack(fill="x", pady=(10, 0))
 
         controls_row = tk.Frame(self.control_frame, bg=PANEL_BG)
         controls_row.pack(fill="x", pady=(12, 0))
 
         mode_group = tk.Frame(controls_row, bg=PANEL_BG)
         mode_group.pack(side="left", padx=(0, 10))
-        tk.Label(mode_group, text="Mode", bg=PANEL_BG, fg=TEXT_SOFT, font=("Segoe UI", 7, "bold")).pack(anchor="w")
         mode_buttons = tk.Frame(mode_group, bg=PANEL_BG)
-        mode_buttons.pack(anchor="w", pady=(4, 0))
+        mode_buttons.pack(anchor="w")
         self.full_btn = self._button(mode_buttons, "Full Screen", self.set_full_screen_mode, variant="secondary")
         self.full_btn.pack(side="left", padx=(0, 6))
         self.area_btn = self._button(mode_buttons, "Select Area", self.prepare_region_mode, variant="secondary")
@@ -276,9 +303,8 @@ class YScreenRecorderOverlay(tk.Toplevel):
 
         record_group = tk.Frame(controls_row, bg=PANEL_BG)
         record_group.pack(side="left", padx=(0, 10))
-        tk.Label(record_group, text="Recorder", bg=PANEL_BG, fg=TEXT_SOFT, font=("Segoe UI", 7, "bold")).pack(anchor="w")
         record_buttons = tk.Frame(record_group, bg=PANEL_BG)
-        record_buttons.pack(anchor="w", pady=(4, 0))
+        record_buttons.pack(anchor="w")
         self.record_btn = self._button(record_buttons, "Start Recording", self.start_recording, variant="primary")
         self.record_btn.pack(side="left", padx=(0, 6))
         self.pause_btn = self._button(record_buttons, "Pause", self.pause_recording, variant="warning")
@@ -290,15 +316,18 @@ class YScreenRecorderOverlay(tk.Toplevel):
 
         utility_group = tk.Frame(controls_row, bg=PANEL_BG)
         utility_group.pack(side="left")
-        tk.Label(utility_group, text="Utility", bg=PANEL_BG, fg=TEXT_SOFT, font=("Segoe UI", 7, "bold")).pack(anchor="w")
         utility_buttons = tk.Frame(utility_group, bg=PANEL_BG)
-        utility_buttons.pack(anchor="w", pady=(4, 0))
+        utility_buttons.pack(anchor="w")
         self.open_folder_btn = self._button(utility_buttons, "Open Folder", self.open_output_dir, variant="secondary")
         self.open_folder_btn.pack(side="left", padx=(0, 6))
+        self.minimize_btn = self._button(utility_buttons, "Minimize", self._minimize_controls_to_timer, variant="secondary")
+        self.minimize_btn.pack(side="left", padx=(0, 6))
         self.close_btn = self._button(utility_buttons, "Close", self.on_close, variant="secondary")
         self.close_btn.pack(side="left")
 
         self.control_window = self.canvas.create_window(0, 0, anchor="nw", window=self.control_frame)
+        self._bind_controls_drag(top_row)
+        self._bind_controls_drag(title_col)
 
     def _info_chip(self, parent, variable):
         chip = tk.Frame(parent, bg=PANEL_CHIP, highlightbackground=PANEL_BORDER, highlightthickness=1, bd=0)
@@ -314,14 +343,10 @@ class YScreenRecorderOverlay(tk.Toplevel):
         return chip
 
     def _button(self, parent, text, command, *, variant="secondary"):
-        palette = {
-            "primary": (ACCENT, "#0EA5E9", "#031925"),
-            "secondary": (PANEL_ALT, "#1B2D46", TEXT_MAIN),
-            "success": (SUCCESS, "#16A34A", "#04160B"),
-            "warning": ("#F59E0B", "#D97706", "#2B1602"),
-            "danger": (DANGER, "#E11D48", "#24060C"),
-        }
-        bg, active_bg, fg = palette[variant]
+        # Unified button theme for a cleaner, consistent control bar.
+        bg = ACCENT
+        active_bg = "#0EA5E9"
+        fg = "#FFFFFF"
         return tk.Button(
             parent,
             text=text,
@@ -334,11 +359,107 @@ class YScreenRecorderOverlay(tk.Toplevel):
             bd=0,
             cursor="hand2",
             padx=12,
-            pady=8,
+            pady=7,
             font=("Segoe UI", 8, "bold"),
             highlightthickness=0,
             width=12,
         )
+
+    def _bind_controls_drag(self, widget):
+        widget.bind("<ButtonPress-1>", self._start_controls_drag, add="+")
+        widget.bind("<B1-Motion>", self._on_controls_drag, add="+")
+        widget.bind("<ButtonRelease-1>", self._end_controls_drag, add="+")
+
+    def _start_controls_drag(self, event):
+        if self.control_window is None:
+            return
+        coords = self.canvas.coords(self.control_window)
+        if len(coords) < 2:
+            return
+        self._controls_drag_state = {
+            "start_root_x": event.x_root,
+            "start_root_y": event.y_root,
+            "window_x": float(coords[0]),
+            "window_y": float(coords[1]),
+        }
+
+    def _on_controls_drag(self, event):
+        if not self._controls_drag_state:
+            return
+        width = self.control_frame.winfo_reqwidth()
+        height = self.control_frame.winfo_reqheight()
+        dx = event.x_root - self._controls_drag_state["start_root_x"]
+        dy = event.y_root - self._controls_drag_state["start_root_y"]
+        x = self._controls_drag_state["window_x"] + dx
+        y = self._controls_drag_state["window_y"] + dy
+        x = max(8, min(x, max(self.screen_width - width - 8, 8)))
+        y = max(8, min(y, max(self.screen_height - height - 8, 8)))
+        self._controls_manual_pos = (x, y)
+        self.canvas.coords(self.control_window, x, y)
+
+    def _end_controls_drag(self, _event):
+        self._controls_drag_state = None
+
+    def _ensure_mini_timer(self):
+        if self.mini_timer_frame is not None and self.mini_timer_window is not None:
+            return
+
+        self.mini_timer_frame = tk.Frame(
+            self.canvas,
+            bg=PANEL_CHIP,
+            highlightbackground=PANEL_BORDER,
+            highlightthickness=1,
+            bd=0,
+            padx=10,
+            pady=6,
+            cursor="hand2",
+        )
+        top = tk.Frame(self.mini_timer_frame, bg=PANEL_CHIP, cursor="hand2")
+        top.pack(fill="x")
+        tk.Label(top, text="YSR", bg=PANEL_CHIP, fg=TEXT_MUTED, font=("Segoe UI", 7, "bold"), cursor="hand2").pack(side="left")
+        tk.Label(top, textvariable=self.timer_state_var, bg=PANEL_CHIP, fg=ACCENT, font=("Segoe UI", 7, "bold"), cursor="hand2").pack(side="right")
+        tk.Label(
+            self.mini_timer_frame,
+            textvariable=self.timer_var,
+            bg=PANEL_CHIP,
+            fg=TEXT_MAIN,
+            font=("Consolas", 12, "bold"),
+            cursor="hand2",
+        ).pack(anchor="center", pady=(2, 0))
+        self.mini_timer_frame.bind("<Button-1>", lambda _e: self._restore_controls_from_timer())
+        for child in self.mini_timer_frame.winfo_children():
+            child.bind("<Button-1>", lambda _e: self._restore_controls_from_timer())
+            for nested in child.winfo_children() if hasattr(child, "winfo_children") else []:
+                nested.bind("<Button-1>", lambda _e: self._restore_controls_from_timer())
+
+        self.mini_timer_window = self.canvas.create_window(0, 0, anchor="nw", window=self.mini_timer_frame, state="hidden")
+
+    def _minimize_controls_to_timer(self):
+        self._controls_minimized = True
+        self._ensure_mini_timer()
+        if self.control_window is not None:
+            self.canvas.itemconfigure(self.control_window, state="hidden")
+        if self.mini_timer_window is not None:
+            self.canvas.itemconfigure(self.mini_timer_window, state="normal")
+        self._position_mini_timer()
+
+    def _restore_controls_from_timer(self):
+        self._controls_minimized = False
+        if self.control_window is not None:
+            self.canvas.itemconfigure(self.control_window, state="normal")
+        if self.mini_timer_window is not None:
+            self.canvas.itemconfigure(self.mini_timer_window, state="hidden")
+        self._position_controls()
+
+    def _position_mini_timer(self):
+        if self.mini_timer_window is None or self.mini_timer_frame is None:
+            return
+        self.update_idletasks()
+        width = self.mini_timer_frame.winfo_reqwidth()
+        height = self.mini_timer_frame.winfo_reqheight()
+        x = max(8, self.screen_width - width - 16)
+        y = max(8, self.screen_height - height - 16)
+        self.canvas.coords(self.mini_timer_window, x, y)
 
     def _bind_events(self):
         self.bind("<Escape>", lambda event: self.on_close())
@@ -551,7 +672,18 @@ class YScreenRecorderOverlay(tk.Toplevel):
         hud.update_idletasks()
         width = hud.winfo_reqwidth()
         height = hud.winfo_reqheight()
-        hud.geometry(self._recording_hud_geometry(width, height))
+        if self._hud_manual_pos is not None:
+            x, y = self._hud_manual_pos
+            min_x = self.virtual_x + 8
+            min_y = self.virtual_y + 8
+            max_x = self.virtual_x + max(self.screen_width - width - 8, 8)
+            max_y = self.virtual_y + max(self.screen_height - height - 8, 8)
+            x = max(min_x, min(x, max_x))
+            y = max(min_y, min(y, max_y))
+            self._hud_manual_pos = (x, y)
+            hud.geometry(f"{width}x{height}+{int(x)}+{int(y)}")
+        else:
+            hud.geometry(self._recording_hud_geometry(width, height))
 
     def _hide_recording_hud(self):
         hud = self.recording_hud
@@ -559,6 +691,8 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self.recording_hud_pause_btn = None
         self.recording_hud_finish_btn = None
         self.recording_hud_open_folder_btn = None
+        self._hud_manual_pos = None
+        self._hud_drag_state = None
         if hud is not None and hud.winfo_exists():
             try:
                 hud.destroy()
@@ -594,8 +728,8 @@ class YScreenRecorderOverlay(tk.Toplevel):
             highlightbackground=PANEL_BORDER,
             highlightthickness=1,
             bd=0,
-            padx=12,
-            pady=12,
+            padx=10,
+            pady=10,
         )
         shell.pack(fill="both", expand=True)
 
@@ -604,10 +738,6 @@ class YScreenRecorderOverlay(tk.Toplevel):
         title_col = tk.Frame(top_row, bg=PANEL_BG)
         title_col.pack(side="left", fill="x", expand=True)
         tk.Label(title_col, text="YScreenRecorder", bg=PANEL_BG, fg=TEXT_MAIN, font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(title_col, text="Transparent controls while recording", bg=PANEL_BG, fg=TEXT_MUTED, font=("Segoe UI", 8)).pack(
-            anchor="w",
-            pady=(2, 0),
-        )
 
         timer_shell = tk.Frame(top_row, bg=PANEL_CHIP, highlightbackground=PANEL_BORDER, highlightthickness=1, bd=0)
         timer_shell.pack(side="right")
@@ -647,6 +777,9 @@ class YScreenRecorderOverlay(tk.Toplevel):
         hide_btn.configure(width=8)
         hide_btn.pack(side="left")
 
+        self._bind_hud_drag(top_row)
+        self._bind_hud_drag(title_col)
+
         self.recording_hud = hud
         self._set_action_states(recording=self.recording_process is not None)
         return hud
@@ -660,6 +793,46 @@ class YScreenRecorderOverlay(tk.Toplevel):
             hud.focus_force()
         except Exception:
             pass
+
+    def _bind_hud_drag(self, widget):
+        widget.bind("<ButtonPress-1>", self._start_hud_drag, add="+")
+        widget.bind("<B1-Motion>", self._on_hud_drag, add="+")
+        widget.bind("<ButtonRelease-1>", self._end_hud_drag, add="+")
+
+    def _start_hud_drag(self, event):
+        hud = self.recording_hud
+        if hud is None or not hud.winfo_exists():
+            return
+        hud.update_idletasks()
+        self._hud_drag_state = {
+            "start_root_x": event.x_root,
+            "start_root_y": event.y_root,
+            "window_x": hud.winfo_x(),
+            "window_y": hud.winfo_y(),
+            "width": hud.winfo_width(),
+            "height": hud.winfo_height(),
+        }
+
+    def _on_hud_drag(self, event):
+        if not self._hud_drag_state:
+            return
+        dx = event.x_root - self._hud_drag_state["start_root_x"]
+        dy = event.y_root - self._hud_drag_state["start_root_y"]
+        width = self._hud_drag_state["width"]
+        height = self._hud_drag_state["height"]
+        x = self._hud_drag_state["window_x"] + dx
+        y = self._hud_drag_state["window_y"] + dy
+        min_x = self.virtual_x + 8
+        min_y = self.virtual_y + 8
+        max_x = self.virtual_x + max(self.screen_width - width - 8, 8)
+        max_y = self.virtual_y + max(self.screen_height - height - 8, 8)
+        x = max(min_x, min(x, max_x))
+        y = max(min_y, min(y, max_y))
+        self._hud_manual_pos = (x, y)
+        self.recording_hud.geometry(f"{width}x{height}+{int(x)}+{int(y)}")
+
+    def _end_hud_drag(self, _event):
+        self._hud_drag_state = None
 
     def show_controls_from_tray(self):
         if self.recording_process is not None:
@@ -863,16 +1036,28 @@ class YScreenRecorderOverlay(tk.Toplevel):
         else:
             self.mode_var.set("Area mode")
 
-        self._position_controls()
+        if self._controls_minimized:
+            self._position_mini_timer()
+        else:
+            self._position_controls()
         self._set_action_states(recording=self.recording_process is not None)
         self._update_last_clip_text()
 
     def _position_controls(self):
+        if self._controls_minimized and self.control_window is not None:
+            self.canvas.itemconfigure(self.control_window, state="hidden")
+            return
         self.update_idletasks()
         width = self.control_frame.winfo_reqwidth()
         height = self.control_frame.winfo_reqheight()
-        x = max(8, (self.screen_width - width) // 2)
-        y = max(8, self.screen_height - height - 18)
+        if self._controls_manual_pos is not None:
+            x, y = self._controls_manual_pos
+            x = max(8, min(x, max(self.screen_width - width - 8, 8)))
+            y = max(8, min(y, max(self.screen_height - height - 8, 8)))
+            self._controls_manual_pos = (x, y)
+        else:
+            x = max(8, (self.screen_width - width) // 2)
+            y = max(8, self.screen_height - height - 18)
         self.canvas.coords(self.control_window, x, y)
 
     def prepare_region_mode(self):
@@ -1139,16 +1324,16 @@ class YScreenRecorderOverlay(tk.Toplevel):
                 user32.RegisterHotKey(
                     None,
                     YSCREENRECORDER_FINISH_HOTKEY_ID,
-                    MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
-                    ord("S"),
+                    YSCREENRECORDER_FINISH_HOTKEY_MODIFIERS,
+                    YSCREENRECORDER_FINISH_HOTKEY_VK,
                 )
             )
             pause_registered = bool(
                 user32.RegisterHotKey(
                     None,
                     YSCREENRECORDER_PAUSE_HOTKEY_ID,
-                    MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
-                    ord("P"),
+                    YSCREENRECORDER_PAUSE_HOTKEY_MODIFIERS,
+                    YSCREENRECORDER_PAUSE_HOTKEY_VK,
                 )
             )
             if not finish_registered and not pause_registered:
@@ -1473,6 +1658,14 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self._refresh_overlay()
 
     def on_close(self):
+        self._controls_minimized = False
+        if self.mini_timer_window is not None:
+            try:
+                self.canvas.delete(self.mini_timer_window)
+            except Exception:
+                pass
+            self.mini_timer_window = None
+        self.mini_timer_frame = None
         global yscreenrecorder_window
 
         if self.recording_process is not None or self.recording_state == "paused":
@@ -1516,10 +1709,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         if yscreenrecorder_window is self:
             yscreenrecorder_window = None
         if self._standalone_root is not None:
-            try:
-                self._standalone_root.destroy()
-            except Exception:
-                pass
+            cleanup_hidden_root(self._standalone_root)
 
 
 def open_yscreenrecorder(parent=None):

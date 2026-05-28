@@ -36,27 +36,56 @@ except ImportError:
     winreg = None
 
 APP_DIR = Path(__file__).resolve().parent
-SRC_DIR = Path(__file__).resolve().parents[2]
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+try:
+    from desktop_tools.app.app_windowing import ensure_src_on_path
+except Exception:
+    from app_windowing import ensure_src_on_path
+SRC_DIR = ensure_src_on_path(__file__)
 
 IS_WINDOWS = sys.platform.startswith("win")
-WM_HOTKEY = 0x0312
-WM_QUIT = 0x0012
-MOD_CONTROL = 0x0002
-MOD_SHIFT = 0x0004
-MOD_NOREPEAT = 0x4000
-CONVERTER_HOTKEY_ID = 0x5943
-CONVERTER_HOTKEY_LABEL = "Ctrl+Shift+V"
-BG_REMOVER_HOTKEY_ID = 0x5942
-BG_REMOVER_HOTKEY_LABEL = "Ctrl+Shift+B"
-SCREENSHOT_HOTKEY_ID = 0x594D
-SCREENSHOT_HOTKEY_LABEL = "Ctrl+Shift+Y"
-SCREENRECORDER_HOTKEY_ID = 0x5952
-SCREENRECORDER_HOTKEY_LABEL = "Ctrl+Shift+R"
 
 try:
     from desktop_tools.shared.resources import apply_window_icon, center_window, get_asset_path, get_project_root, get_user_data_dir
+    from desktop_tools.app.hub import tool_actions as hub_tool_actions
+    from desktop_tools.app.platform.hotkeys import (
+        BG_REMOVER_HOTKEY_ID,
+        BG_REMOVER_HOTKEY_MODIFIERS,
+        BG_REMOVER_HOTKEY_VK,
+        BG_REMOVER_HOTKEY_LABEL,
+        CONVERTER_HOTKEY_ID,
+        CONVERTER_HOTKEY_MODIFIERS,
+        CONVERTER_HOTKEY_VK,
+        CONVERTER_HOTKEY_LABEL,
+        SCREENRECORDER_HOTKEY_ID,
+        SCREENRECORDER_HOTKEY_MODIFIERS,
+        SCREENRECORDER_HOTKEY_VK,
+        SCREENRECORDER_HOTKEY_LABEL,
+        SCREENSHOT_HOTKEY_ID,
+        SCREENSHOT_HOTKEY_MODIFIERS,
+        SCREENSHOT_HOTKEY_VK,
+        SCREENSHOT_HOTKEY_LABEL,
+        WM_HOTKEY,
+        WM_QUIT,
+    )
+    from desktop_tools.app.services.url_policy import get_blocked_domain
+    from desktop_tools.app.config.runtime_flags import (
+        APP_FLAGS,
+        APP_FLAGS_PATH,
+        APP_VERSION_MAIN,
+        CLIPBOARD_POLL_MS_ACTIVE,
+        CLIPBOARD_POLL_MS_BACKGROUND,
+        CLIPBOARD_RECENT_LIMIT,
+        DEBUG_MODE,
+        DOWNLOAD_ROOT_DIRNAME,
+        DISABLED_DOMAINS,
+        MAX_LOG_LINES,
+        PROGRESS_LOG_MIN_INTERVAL_MS,
+        PROGRESS_UI_MIN_INTERVAL_MS,
+        UI_QUEUE_POLL_MS,
+        get_tool_theme,
+        get_disabled_domain_match as _get_disabled_domain_match,
+        normalize_domain_name,
+    )
     from desktop_tools.shared.ffmpeg import (
         download_managed_ffmpeg,
         ensure_managed_ffmpeg,
@@ -68,6 +97,28 @@ try:
     from desktop_tools.shared.direct_download import DirectDownloadError, DirectDownloadTask
     from desktop_tools.shared.direct_download_manager import DirectDownloadManager
 except Exception:
+    WM_HOTKEY = 0x0312
+    WM_QUIT = 0x0012
+    MOD_CONTROL = 0x0002
+    MOD_SHIFT = 0x0004
+    MOD_NOREPEAT = 0x4000
+    CONVERTER_HOTKEY_ID = 0x5943
+    CONVERTER_HOTKEY_MODIFIERS = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
+    CONVERTER_HOTKEY_VK = ord("V")
+    CONVERTER_HOTKEY_LABEL = "Ctrl+Shift+V"
+    BG_REMOVER_HOTKEY_ID = 0x5942
+    BG_REMOVER_HOTKEY_MODIFIERS = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
+    BG_REMOVER_HOTKEY_VK = ord("B")
+    BG_REMOVER_HOTKEY_LABEL = "Ctrl+Shift+B"
+    SCREENSHOT_HOTKEY_ID = 0x594D
+    SCREENSHOT_HOTKEY_MODIFIERS = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
+    SCREENSHOT_HOTKEY_VK = ord("Y")
+    SCREENSHOT_HOTKEY_LABEL = "Ctrl+Shift+Y"
+    SCREENRECORDER_HOTKEY_ID = 0x5952
+    SCREENRECORDER_HOTKEY_MODIFIERS = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
+    SCREENRECORDER_HOTKEY_VK = ord("R")
+    SCREENRECORDER_HOTKEY_LABEL = "Ctrl+Shift+R"
+
     def apply_window_icon(window, app_id="needyamin.media_downloader"):
         return APP_DIR / "assets" / "needyamin.ico"
 
@@ -166,78 +217,70 @@ except Exception:
     def update_managed_ffmpeg_if_needed(logger=None, progress_callback=None, force=False, extra_paths=None):
         return None, None, False
 
-APP_FLAGS_PATH = get_project_root() / "app_flags.json"
-DEFAULT_APP_FLAGS = {
-    "debug_logging": False,
-    "ui_queue_poll_ms": 150,
-    "clipboard_poll_ms_active": 1200,
-    "clipboard_poll_ms_background": 2500,
-    "clipboard_recent_limit": 10,
-    "progress_log_min_interval_ms": 1500,
-    "progress_ui_min_interval_ms": 250,
-    "max_log_lines": 400,
-    "disabled_domains": [],
-}
+    APP_FLAGS_PATH = get_project_root() / "app_flags.json"
+    APP_FLAGS = {}
+    APP_VERSION_MAIN = "2.0.0"
+    DEBUG_MODE = False
+    DOWNLOAD_ROOT_DIRNAME = "Yamin Downloader"
+    UI_QUEUE_POLL_MS = 150
+    CLIPBOARD_POLL_MS_ACTIVE = 1200
+    CLIPBOARD_POLL_MS_BACKGROUND = 2500
+    CLIPBOARD_RECENT_LIMIT = 10
+    PROGRESS_LOG_MIN_INTERVAL_MS = 1500
+    PROGRESS_UI_MIN_INTERVAL_MS = 250
+    MAX_LOG_LINES = 400
+    DISABLED_DOMAINS = []
 
-def load_app_flags():
-    """Load runtime flags from the project root for easy tuning."""
-    flags = DEFAULT_APP_FLAGS.copy()
-    try:
-        if APP_FLAGS_PATH.exists():
-            with open(APP_FLAGS_PATH, 'r', encoding='utf-8') as flag_file:
-                loaded_flags = json.load(flag_file)
-            if isinstance(loaded_flags, dict):
-                flags.update(loaded_flags)
-    except Exception:
-        pass
-    return flags
+    def normalize_domain_name(domain):
+        if not domain:
+            return ""
+        normalized = str(domain).strip().lower().rstrip(".")
+        while normalized.startswith("."):
+            normalized = normalized[1:]
+        if normalized.startswith("www."):
+            normalized = normalized[4:]
+        return normalized
 
-APP_FLAGS = load_app_flags()
-DEBUG_MODE = bool(APP_FLAGS.get("debug_logging", False))
-UI_QUEUE_POLL_MS = max(50, int(APP_FLAGS.get("ui_queue_poll_ms", 150)))
-CLIPBOARD_POLL_MS_ACTIVE = max(250, int(APP_FLAGS.get("clipboard_poll_ms_active", 1200)))
-CLIPBOARD_POLL_MS_BACKGROUND = max(500, int(APP_FLAGS.get("clipboard_poll_ms_background", 2500)))
-CLIPBOARD_RECENT_LIMIT = max(1, int(APP_FLAGS.get("clipboard_recent_limit", 10)))
-PROGRESS_LOG_MIN_INTERVAL_MS = max(250, int(APP_FLAGS.get("progress_log_min_interval_ms", 1500)))
-PROGRESS_UI_MIN_INTERVAL_MS = max(100, int(APP_FLAGS.get("progress_ui_min_interval_ms", 250)))
-MAX_LOG_LINES = max(50, int(APP_FLAGS.get("max_log_lines", 400)))
+    def _get_disabled_domain_match(url, disabled_domains):
+        try:
+            hostname = normalize_domain_name(urlparse(url).hostname)
+            if not hostname:
+                return None
+            for blocked_domain in disabled_domains:
+                if hostname == blocked_domain or hostname.endswith(f".{blocked_domain}"):
+                    return blocked_domain
+        except Exception:
+            return None
+        return None
 
-def normalize_domain_name(domain):
-    """Normalize a domain name for blocklist checks."""
-    if not domain:
-        return ""
+    def get_blocked_domain(url, disabled_domains):
+        return _get_disabled_domain_match(url, disabled_domains)
 
-    normalized = str(domain).strip().lower().rstrip('.')
-    while normalized.startswith('.'):
-        normalized = normalized[1:]
-    if normalized.startswith('www.'):
-        normalized = normalized[4:]
-    return normalized
+    def get_tool_theme(tool_name, defaults):
+        return defaults
 
-DISABLED_DOMAINS = [
-    normalized
-    for normalized in (
-        normalize_domain_name(domain)
-        for domain in APP_FLAGS.get("disabled_domains", [])
-        if isinstance(domain, str)
-    )
-    if normalized
-]
+    class _HubToolActionsFallback:
+        @staticmethod
+        def open_converter(*, root, log, messagebox_module):
+            raise RuntimeError("Desktop tool launchers are unavailable.")
+
+        @staticmethod
+        def open_background_remover(*, root, log, messagebox_module):
+            raise RuntimeError("Desktop tool launchers are unavailable.")
+
+        @staticmethod
+        def open_screenshot_studio(*, root, log, messagebox_module):
+            raise RuntimeError("Desktop tool launchers are unavailable.")
+
+        @staticmethod
+        def open_yscreenrecorder(*, root, log, messagebox_module):
+            raise RuntimeError("Desktop tool launchers are unavailable.")
+
+    hub_tool_actions = _HubToolActionsFallback()
 
 def get_disabled_domain_match(url):
     """Return the blocked domain that matches a URL, if any."""
-    try:
-        hostname = normalize_domain_name(urlparse(url).hostname)
-        if not hostname:
-            return None
-
-        for blocked_domain in DISABLED_DOMAINS:
-            if hostname == blocked_domain or hostname.endswith(f".{blocked_domain}"):
-                return blocked_domain
-    except Exception:
-        return None
-
-    return None
+    return get_blocked_domain(url, DISABLED_DOMAINS)
 
 def debug_print(*args, **kwargs):
     """Print only when debug logging is enabled."""
@@ -315,7 +358,7 @@ def setup_debugging():
 setup_debugging()
 
 # GUI Theme and Styles
-THEME = {
+THEME_DEFAULTS = {
     'bg': '#ffffff',
     'fg': '#333333',
     'primary': '#2196F3',
@@ -327,6 +370,7 @@ THEME = {
     'light_gray': '#f5f5f5',
     'border': '#e0e0e0'
 }
+THEME = get_tool_theme("media_downloader", THEME_DEFAULTS)
 
 # Path configuration
 ICON_PATH = get_asset_path("needyamin.ico")
@@ -337,7 +381,7 @@ INSTALL_DIR.mkdir(parents=True, exist_ok=True)
 DIRECT_DOWNLOAD_HISTORY_FILE = INSTALL_DIR / "direct_download_history.json"
 
 # Persistent settings and output directories
-DEFAULT_DOWNLOADS_PATH = Path.home() / "Downloads" / "Yamin Downloader"
+DEFAULT_DOWNLOADS_PATH = Path.home() / "Downloads" / DOWNLOAD_ROOT_DIRNAME
 SETTINGS_FILE = INSTALL_DIR / "settings.json"
 VALID_VIDEO_QUALITIES = {"best", "1080", "720", "480", "360"}
 VALID_AUDIO_QUALITIES = {"320", "256", "192", "128", "96"}
@@ -346,7 +390,7 @@ VALID_FORMATS = {"mp4", "webm", "mkv"}
 # Auto-update configuration
 REPO_OWNER = "needyamin"
 REPO_NAME = "media-downloader"
-CURRENT_VERSION = "2.0.0"
+CURRENT_VERSION = APP_VERSION_MAIN
 GITHUB_API_URL = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 UPDATE_CHECK_FILE = INSTALL_DIR / "last_update_check.txt"
 APP_UPDATE_DIR = INSTALL_DIR / "updates"
@@ -1138,7 +1182,7 @@ def show_debug_update_window(debug_data, report_text):
         release_link = tk.Label(
             outer,
             text=debug_data['release_url'],
-            font=('Segoe UI', 10, 'underline'),
+            font=('Segoe UI', 10),
             bg=THEME['bg'],
             fg=THEME['primary'],
             cursor='hand2',
@@ -1560,7 +1604,7 @@ def create_link_label(master, text, url, bg):
     link = tk.Label(
         master,
         text=text,
-        font=('Segoe UI', 10, 'underline'),
+        font=('Segoe UI', 10),
         fg=THEME['primary'],
         bg=bg,
         cursor='hand2',
@@ -1590,33 +1634,43 @@ def show_about_window():
 
     about_window = tk.Toplevel(root)
     about_window.title("About Us")
-    about_window.geometry("700x500")
-    about_window.minsize(640, 460)
+    about_window.geometry("780x560")
+    about_window.minsize(700, 500)
     about_window.configure(bg=THEME['bg'])
     about_window.transient(root)
     about_window.protocol("WM_DELETE_WINDOW", close_about_window)
     apply_window_icon(about_window, app_id="needyamin.media_downloader")
 
     outer = tk.Frame(about_window, bg=THEME['bg'])
-    outer.pack(fill='both', expand=True, padx=24, pady=24)
+    outer.pack(fill='both', expand=True, padx=24, pady=22)
 
-    header_card = tk.Frame(outer, bg=THEME['light_gray'], bd=1, relief='solid')
-    header_card.pack(fill='x', pady=(0, 18))
+    shell_card = tk.Frame(
+        outer,
+        bg='white',
+        bd=0,
+        highlightthickness=1,
+        highlightbackground=THEME['border'],
+        highlightcolor=THEME['border'],
+    )
+    shell_card.pack(fill='both', expand=True)
+
+    header_card = tk.Frame(shell_card, bg='white')
+    header_card.pack(fill='x', padx=24, pady=(22, 14))
 
     avatar_source = load_profile_avatar()
     avatar_photo = ImageTk.PhotoImage(avatar_source)
-    avatar_label = tk.Label(header_card, image=avatar_photo, bg=THEME['light_gray'])
+    avatar_label = tk.Label(header_card, image=avatar_photo, bg='white')
     avatar_label.image = avatar_photo
     avatar_label.pack(side='left', padx=20, pady=20)
 
-    info_frame = tk.Frame(header_card, bg=THEME['light_gray'])
+    info_frame = tk.Frame(header_card, bg='white')
     info_frame.pack(fill='both', expand=True, padx=(0, 20), pady=20)
 
     tk.Label(
         info_frame,
         text=AUTHOR_PROFILE['name'],
-        font=('Segoe UI', 20, 'bold'),
-        bg=THEME['light_gray'],
+        font=('Segoe UI', 21, 'bold'),
+        bg='white',
         fg=THEME['fg'],
         anchor='w',
     ).pack(anchor='w')
@@ -1625,33 +1679,35 @@ def show_about_window():
         info_frame,
         text=AUTHOR_PROFILE['role'],
         font=('Segoe UI', 11),
-        bg=THEME['light_gray'],
-        fg=THEME['fg'],
+        bg='white',
+        fg=THEME['secondary'],
         anchor='w',
-    ).pack(anchor='w', pady=(4, 2))
+    ).pack(anchor='w', pady=(5, 2))
 
     tk.Label(
         info_frame,
         text=AUTHOR_PROFILE['location'],
         font=('Segoe UI', 10),
-        bg=THEME['light_gray'],
+        bg='white',
         fg=THEME['gray'],
         anchor='w',
-    ).pack(anchor='w', pady=(0, 8))
+    ).pack(anchor='w', pady=(0, 10))
 
     tk.Label(
         info_frame,
         text=AUTHOR_PROFILE['bio'],
         font=('Segoe UI', 10),
-        bg=THEME['light_gray'],
+        bg='white',
         fg=THEME['fg'],
         anchor='w',
         justify='left',
-        wraplength=430,
+        wraplength=470,
     ).pack(anchor='w')
 
-    details_card = tk.Frame(outer, bg='white', bd=1, relief='solid')
-    details_card.pack(fill='both', expand=True)
+    tk.Frame(shell_card, bg=THEME['border'], height=1).pack(fill='x', padx=24, pady=(0, 0))
+
+    details_card = tk.Frame(shell_card, bg='white')
+    details_card.pack(fill='both', expand=True, padx=24, pady=(14, 18))
 
     tk.Label(
         details_card,
@@ -1662,7 +1718,7 @@ def show_about_window():
     ).pack(anchor='w', padx=20, pady=(18, 10))
 
     links_frame = tk.Frame(details_card, bg='white')
-    links_frame.pack(fill='x', padx=20)
+    links_frame.pack(fill='x', padx=20, pady=(0, 6))
 
     for label, url in [
         ("GitHub", AUTHOR_PROFILE['github']),
@@ -1671,7 +1727,7 @@ def show_about_window():
         ("Facebook", AUTHOR_PROFILE['facebook']),
     ]:
         row = tk.Frame(links_frame, bg='white')
-        row.pack(fill='x', pady=4)
+        row.pack(fill='x', pady=3)
         tk.Label(
             row,
             text=f"{label}:",
@@ -1695,10 +1751,10 @@ def show_about_window():
         justify='left',
         wraplength=620,
     )
-    description.pack(anchor='w', padx=20, pady=(18, 12))
+    description.pack(anchor='w', padx=20, pady=(16, 14))
 
     button_row = tk.Frame(details_card, bg='white')
-    button_row.pack(fill='x', padx=20, pady=(0, 18))
+    button_row.pack(fill='x', padx=20, pady=(2, 4))
 
     tk.Button(
         button_row,
@@ -1709,22 +1765,23 @@ def show_about_window():
         activeforeground='white',
         relief='flat',
         cursor='hand2',
-        padx=16,
-        pady=7,
+        padx=18,
+        pady=8,
         command=lambda: webbrowser.open(AUTHOR_PROFILE['github']),
     ).pack(side='left')
 
     tk.Button(
         button_row,
         text="Close",
-        bg=THEME['light_gray'],
+        bg='white',
         fg=THEME['fg'],
         activebackground=THEME['border'],
         activeforeground=THEME['fg'],
         relief='flat',
+        bd=0,
         cursor='hand2',
-        padx=16,
-        pady=7,
+        padx=18,
+        pady=8,
         command=close_about_window,
     ).pack(side='right')
 
@@ -1732,27 +1789,16 @@ def show_about_window():
 
 def open_converter():
     """Open the converter from the downloader menu bar."""
-    try:
-        from desktop_tools.app.converter_app import open_converter_window
-
-        converter_window = open_converter_window(root)
-        if converter_window is not None:
-            log("Opened Media Converter")
-    except Exception as e:
-        log(f"Error opening converter: {e}")
-        messagebox.showerror("Converter Error", f"Could not open the converter:\n{e}")
+    hub_tool_actions.open_converter(
+        root=root,
+        log=log,
+        messagebox_module=messagebox,
+        default_output_dir=str(downloads_path),
+    )
 
 def open_background_remover():
     """Open the background remover from the downloader menu bar."""
-    try:
-        from desktop_tools.app.background_remover_app import open_background_remover as launch_background_remover
-
-        remover_window = launch_background_remover(root)
-        if remover_window is not None:
-            log("Opened Image Background Remover")
-    except Exception as e:
-        log(f"Error opening background remover: {e}")
-        messagebox.showerror("Background Remover Error", f"Could not open the background remover:\n{e}")
+    hub_tool_actions.open_background_remover(root=root, log=log, messagebox_module=messagebox)
 
 def trigger_converter(event=None):
     """Open the converter from the GUI or keyboard shortcut."""
@@ -1768,15 +1814,7 @@ def trigger_background_remover(event=None):
 
 def open_screenshot_studio():
     """Open YScreenshot from the downloader menu bar."""
-    try:
-        from desktop_tools.app.screenshot_app import open_screenshot_studio as launch_screenshot_studio
-
-        screenshot_window = launch_screenshot_studio(root)
-        if screenshot_window is not None:
-            log("Opened YScreenshot")
-    except Exception as e:
-        log(f"Error opening screenshot studio: {e}")
-        messagebox.showerror("YScreenshot Error", f"Could not open YScreenshot:\n{e}")
+    hub_tool_actions.open_screenshot_studio(root=root, log=log, messagebox_module=messagebox)
 
 def trigger_screenshot_studio(event=None):
     """Open YScreenshot from the GUI or keyboard shortcut."""
@@ -1786,15 +1824,7 @@ def trigger_screenshot_studio(event=None):
 
 def open_yscreenrecorder():
     """Open YScreenRecorder from the downloader menu bar."""
-    try:
-        from desktop_tools.app.yscreenrecorder_app import open_yscreenrecorder as launch_yscreenrecorder
-
-        recorder_window = launch_yscreenrecorder(root)
-        if recorder_window is not None:
-            log("Opened YScreenRecorder")
-    except Exception as e:
-        log(f"Error opening YScreenRecorder: {e}")
-        messagebox.showerror("YScreenRecorder Error", f"Could not open YScreenRecorder:\n{e}")
+    hub_tool_actions.open_yscreenrecorder(root=root, log=log, messagebox_module=messagebox)
 
 def trigger_yscreenrecorder(event=None):
     """Open YScreenRecorder from the GUI or keyboard shortcut."""
@@ -3585,23 +3615,22 @@ def _run_screenshot_hotkey_listener():
     user32 = ctypes.windll.user32
     kernel32 = ctypes.windll.kernel32
     screenshot_hotkey_thread_id = int(kernel32.GetCurrentThreadId())
-    modifiers = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
     message = wintypes.MSG()
 
     try:
-        converter_registered = bool(user32.RegisterHotKey(None, CONVERTER_HOTKEY_ID, modifiers, ord('V')))
+        converter_registered = bool(user32.RegisterHotKey(None, CONVERTER_HOTKEY_ID, CONVERTER_HOTKEY_MODIFIERS, CONVERTER_HOTKEY_VK))
         if not converter_registered:
             log(f"Global converter hotkey unavailable: {CONVERTER_HOTKEY_LABEL}")
 
-        background_remover_registered = bool(user32.RegisterHotKey(None, BG_REMOVER_HOTKEY_ID, modifiers, ord('B')))
+        background_remover_registered = bool(user32.RegisterHotKey(None, BG_REMOVER_HOTKEY_ID, BG_REMOVER_HOTKEY_MODIFIERS, BG_REMOVER_HOTKEY_VK))
         if not background_remover_registered:
             log(f"Global background remover hotkey unavailable: {BG_REMOVER_HOTKEY_LABEL}")
 
-        screenshot_registered = bool(user32.RegisterHotKey(None, SCREENSHOT_HOTKEY_ID, modifiers, ord('Y')))
+        screenshot_registered = bool(user32.RegisterHotKey(None, SCREENSHOT_HOTKEY_ID, SCREENSHOT_HOTKEY_MODIFIERS, SCREENSHOT_HOTKEY_VK))
         if not screenshot_registered:
             log(f"Global screenshot hotkey unavailable: {SCREENSHOT_HOTKEY_LABEL}")
 
-        recorder_registered = bool(user32.RegisterHotKey(None, SCREENRECORDER_HOTKEY_ID, modifiers, ord('R')))
+        recorder_registered = bool(user32.RegisterHotKey(None, SCREENRECORDER_HOTKEY_ID, SCREENRECORDER_HOTKEY_MODIFIERS, SCREENRECORDER_HOTKEY_VK))
         if not recorder_registered:
             log(f"Global screen recorder hotkey unavailable: {SCREENRECORDER_HOTKEY_LABEL}")
 

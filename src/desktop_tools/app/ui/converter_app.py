@@ -10,53 +10,73 @@ import time
 from pathlib import Path
 import sys
 
+try:
+    from desktop_tools.app.app_windowing import cleanup_hidden_root, create_hidden_root, ensure_src_on_path
+except Exception:
+    from app_windowing import cleanup_hidden_root, create_hidden_root, ensure_src_on_path
+
 APP_DIR = Path(__file__).resolve().parent
-SRC_DIR = Path(__file__).resolve().parents[2]
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
+SRC_DIR = ensure_src_on_path(__file__)
 
 from desktop_tools.shared.resources import apply_window_icon, center_window
 from desktop_tools.shared.ffmpeg import ensure_managed_ffmpeg, update_managed_ffmpeg_if_needed
+from desktop_tools.app.config.runtime_flags import get_tool_theme
 
 # Colors & Theme
-PRIMARY_BG = "#020617"
-SURFACE_BG = "#081121"
-CARD_BG = "#0B1628"
-SECTION_BG = "#101C32"
-INPUT_BG = "#0E1A2E"
-BORDER = "#22304A"
-INPUT_BORDER = "#334155"
-ACCENT = "#38BDF8"
-ACCENT_BG = "#0EA5E9"
-ACCENT_SOFT = "#082F49"
-ACCENT_DANGER = "#F43F5E"
-SUCCESS = "#22C55E"
-WARNING = "#F59E0B"
-TEXT_MAIN = "#F8FAFC"
-TEXT_MUTED = "#A5B4CC"
-TEXT_SOFT = "#64748B"
+CONVERTER_THEME_DEFAULTS = {
+    "PRIMARY_BG": "#020617",
+    "SURFACE_BG": "#081121",
+    "CARD_BG": "#0B1628",
+    "SECTION_BG": "#101C32",
+    "INPUT_BG": "#0E1A2E",
+    "BORDER": "#22304A",
+    "INPUT_BORDER": "#334155",
+    "ACCENT": "#38BDF8",
+    "ACCENT_BG": "#0EA5E9",
+    "ACCENT_SOFT": "#082F49",
+    "ACCENT_DANGER": "#F43F5E",
+    "SUCCESS": "#22C55E",
+    "WARNING": "#F59E0B",
+    "TEXT_MAIN": "#F8FAFC",
+    "TEXT_MUTED": "#A5B4CC",
+    "TEXT_SOFT": "#64748B",
+}
+CONVERTER_THEME = get_tool_theme("converter", CONVERTER_THEME_DEFAULTS)
+PRIMARY_BG = CONVERTER_THEME["PRIMARY_BG"]
+SURFACE_BG = CONVERTER_THEME["SURFACE_BG"]
+CARD_BG = CONVERTER_THEME["CARD_BG"]
+SECTION_BG = CONVERTER_THEME["SECTION_BG"]
+INPUT_BG = CONVERTER_THEME["INPUT_BG"]
+BORDER = CONVERTER_THEME["BORDER"]
+INPUT_BORDER = CONVERTER_THEME["INPUT_BORDER"]
+ACCENT = CONVERTER_THEME["ACCENT"]
+ACCENT_BG = CONVERTER_THEME["ACCENT_BG"]
+ACCENT_SOFT = CONVERTER_THEME["ACCENT_SOFT"]
+ACCENT_DANGER = CONVERTER_THEME["ACCENT_DANGER"]
+SUCCESS = CONVERTER_THEME["SUCCESS"]
+WARNING = CONVERTER_THEME["WARNING"]
+TEXT_MAIN = CONVERTER_THEME["TEXT_MAIN"]
+TEXT_MUTED = CONVERTER_THEME["TEXT_MUTED"]
+TEXT_SOFT = CONVERTER_THEME["TEXT_SOFT"]
 
 converter_window = None
 
 class ConverterApp(tk.Toplevel):
-    def __init__(self, parent=None):
-        self._standalone_root = None
-        if parent is None:
-            self._standalone_root = tk.Tk()
-            self._standalone_root.withdraw()
-            parent = self._standalone_root
+    def __init__(self, parent=None, default_output_dir=None):
+        parent, self._standalone_root = create_hidden_root(parent)
 
         super().__init__(parent)
         self.parent_window = parent if isinstance(parent, (tk.Tk, tk.Toplevel)) else None
 
-        self.title("FFmpeg Converter Studio")
-        self.geometry("1040x700")
-        self.minsize(860, 620)
+        self.title("Video Converter")
+        self.geometry("1040x780")
+        self.minsize(860, 700)
         self.configure(bg=PRIMARY_BG)
         self.icon_path = apply_window_icon(self, app_id="needyamin.media_downloader")
 
         # --- Variables ---
-        self.output_dir_var = tk.StringVar(value=os.path.expanduser("~"))
+        initial_output_dir = default_output_dir or os.path.expanduser("~")
+        self.output_dir_var = tk.StringVar(value=initial_output_dir)
         self.status_var = tk.StringVar(value="Ready to add files")
         
         # Advanced options
@@ -64,6 +84,10 @@ class ConverterApp(tk.Toplevel):
         self.encode_crf_var = tk.IntVar(value=18)      # Default 18 (High Quality)
         self.encode_preset_var = tk.StringVar(value="medium")
         self.max_threads_var = tk.IntVar(value=3)
+        self.size_profile_var = tk.StringVar(value="Balanced")
+        self.resolution_var = tk.StringVar(value="Original")
+        self.audio_bitrate_var = tk.StringVar(value="128k")
+        self.faststart_var = tk.BooleanVar(value=True)
         self.ffmpeg_path = None
         self.ffprobe_path = None
         self.queue_summary_var = tk.StringVar(value="0 files")
@@ -441,36 +465,15 @@ class ConverterApp(tk.Toplevel):
         root = ttk.Frame(self, style="TFrame")
         root.pack(fill="both", expand=True, padx=16, pady=16)
 
-        header_frame = ttk.Frame(root, style="TFrame")
-        header_frame.pack(fill="x")
-
-        title_box = ttk.Frame(header_frame, style="TFrame")
-        title_box.pack(side="left", fill="x", expand=True)
-        ttk.Label(title_box, text="FFmpeg Converter Studio", style="Header.TLabel").pack(anchor="w")
-        ttk.Label(
-            title_box,
-            text="A polished workspace for organizing queues and converting faster.",
-            style="SubHeader.TLabel",
-        ).pack(anchor="w", pady=(2, 0))
-
-        badge_row = ttk.Frame(title_box, style="TFrame")
-        badge_row.pack(anchor="w", pady=(6, 0))
-        ttk.Label(badge_row, text="Batch Queue", style="Pill.TLabel").pack(side="left", padx=(0, 8))
-        ttk.Label(badge_row, text="Quick Controls", style="Pill.TLabel").pack(side="left")
-
-        status_shell = ttk.Frame(root, style="Surface.TFrame", padding=1)
-        status_shell.pack(fill="x", pady=(10, 10))
-        status_card = ttk.Frame(status_shell, style="Section.TFrame", padding=(14, 12))
-        status_card.pack(fill="both", expand=True)
-        ttk.Label(status_card, text="QUEUE STATUS", style="MetricLabel.TLabel").pack(anchor="w")
+        ttk.Label(root, text="Video Converter", style="Header.TLabel").pack(anchor="w")
         self.lbl_global_status = ttk.Label(
-            status_card,
+            root,
             textvariable=self.status_var,
-            style="HeroStatus.TLabel",
+            style="SubHeader.TLabel",
             wraplength=900,
             justify="left",
         )
-        self.lbl_global_status.pack(anchor="w", pady=(6, 0))
+        self.lbl_global_status.pack(anchor="w", pady=(2, 10))
 
         main_frame = ttk.Frame(root, style="TFrame")
         main_frame.pack(fill="both", expand=True)
@@ -488,11 +491,6 @@ class ConverterApp(tk.Toplevel):
         queue_title = ttk.Frame(queue_header, style="Panel.TFrame")
         queue_title.pack(side="left", fill="x", expand=True)
         ttk.Label(queue_title, text="Conversion Queue", style="SectionTitle.TLabel").pack(anchor="w")
-        ttk.Label(
-            queue_title,
-            text="Track every file, monitor live progress, and keep the queue organized.",
-            style="SectionBody.TLabel",
-        ).pack(anchor="w", pady=(2, 0))
         ttk.Label(queue_header, textvariable=self.queue_summary_var, style="Pill.TLabel").pack(side="right")
 
         toolbar = ttk.Frame(left_panel, style="Panel.TFrame")
@@ -510,19 +508,6 @@ class ConverterApp(tk.Toplevel):
         self.btn_start.pack(side="left", padx=(0, 8))
         self.btn_stop = ttk.Button(toolbar_right, text="Stop", style="Danger.TButton", command=self.stop_queue, state="disabled")
         self.btn_stop.pack(side="left")
-
-        quick_info = ttk.Frame(left_panel, style="Section.TFrame", padding=(10, 8))
-        quick_info.pack(fill="x", pady=(0, 10))
-        ttk.Label(
-            quick_info,
-            textvariable=self.queue_detail_var,
-            style="Hint.TLabel",
-        ).pack(side="left")
-        ttk.Label(
-            quick_info,
-            textvariable=self.mode_summary_var,
-            style="Hint.TLabel",
-        ).pack(side="right")
 
         tree_shell = ttk.Frame(left_panel, style="Surface.TFrame", padding=1)
         tree_shell.pack(fill="both", expand=True)
@@ -554,23 +539,12 @@ class ConverterApp(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        ttk.Label(
-            left_panel,
-            text="Tip: select multiple rows to remove or restart failed items with Start Queue.",
-            style="SectionBody.TLabel",
-        ).pack(anchor="w", pady=(8, 0))
-
         right_shell = ttk.Frame(main_frame, style="Surface.TFrame", padding=1)
         right_shell.grid(row=0, column=1, sticky="nsew")
         right_panel = ttk.Frame(right_shell, style="Panel.TFrame", padding=(14, 14))
         right_panel.pack(fill="both", expand=True)
 
-        ttk.Label(right_panel, text="Quick Settings", style="SectionTitle.TLabel").pack(anchor="w")
-        ttk.Label(
-            right_panel,
-            text="Everything important stays visible in the default window.",
-            style="SectionBody.TLabel",
-        ).pack(anchor="w", pady=(2, 10))
+        ttk.Label(right_panel, text="Settings", style="SectionTitle.TLabel").pack(anchor="w", pady=(0, 10))
 
         output_section = ttk.Frame(right_panel, style="Section.TFrame", padding=(12, 12))
         output_section.pack(fill="x", pady=(0, 8))
@@ -655,6 +629,61 @@ class ConverterApp(tk.Toplevel):
         ttk.Label(performance_section, text="Threads (Max Concurrent)", style="Hint.TLabel").pack(anchor="w", pady=(0, 4))
         ttk.Spinbox(performance_section, from_=1, to=16, textvariable=self.max_threads_var, width=6, style="Modern.TSpinbox").pack(anchor="w")
 
+        reduction_section = ttk.Frame(right_panel, style="Section.TFrame", padding=(12, 12))
+        reduction_section.pack(fill="x", pady=(0, 8))
+        ttk.Label(reduction_section, text="Size Reduction", style="FieldLabel.TLabel").pack(anchor="w")
+        ttk.Label(
+            reduction_section,
+            text="Use these options to reduce output MB size.",
+            style="Hint.TLabel",
+        ).pack(anchor="w", pady=(0, 6))
+
+        profile_row = ttk.Frame(reduction_section, style="Section.TFrame")
+        profile_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(profile_row, text="Profile", style="Hint.TLabel").pack(side="left")
+        profile_cb = ttk.Combobox(
+            profile_row,
+            textvariable=self.size_profile_var,
+            values=["Balanced", "Smaller File", "Smallest File"],
+            state="readonly",
+            width=16,
+            style="Modern.TCombobox",
+        )
+        profile_cb.pack(side="right")
+        profile_cb.bind("<<ComboboxSelected>>", lambda _e: self._apply_size_profile())
+
+        resolution_row = ttk.Frame(reduction_section, style="Section.TFrame")
+        resolution_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(resolution_row, text="Max Resolution", style="Hint.TLabel").pack(side="left")
+        ttk.Combobox(
+            resolution_row,
+            textvariable=self.resolution_var,
+            values=["Original", "1080p", "720p", "480p"],
+            state="readonly",
+            width=16,
+            style="Modern.TCombobox",
+        ).pack(side="right")
+
+        audio_row = ttk.Frame(reduction_section, style="Section.TFrame")
+        audio_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(audio_row, text="Audio Bitrate", style="Hint.TLabel").pack(side="left")
+        ttk.Combobox(
+            audio_row,
+            textvariable=self.audio_bitrate_var,
+            values=["192k", "160k", "128k", "96k", "64k"],
+            state="readonly",
+            width=16,
+            style="Modern.TCombobox",
+        ).pack(side="right")
+
+        ttk.Checkbutton(
+            reduction_section,
+            text="Web optimize (fast start)",
+            variable=self.faststart_var,
+            style="Card.TCheckbutton",
+        ).pack(anchor="w", pady=(2, 0))
+
+        self._apply_size_profile()
         self._update_mode_state()
 
     def _update_mode_state(self):
@@ -671,6 +700,28 @@ class ConverterApp(tk.Toplevel):
                 try: child.configure(state="disabled")
                 except: pass
         self._refresh_dashboard()
+
+    def _apply_size_profile(self):
+        profile = self.size_profile_var.get()
+        if profile == "Smaller File":
+            self.mode_var.set("encode")
+            self.encode_crf_var.set(22)
+            self.encode_preset_var.set("faster")
+            self.resolution_var.set("1080p")
+            self.audio_bitrate_var.set("128k")
+        elif profile == "Smallest File":
+            self.mode_var.set("encode")
+            self.encode_crf_var.set(26)
+            self.encode_preset_var.set("veryfast")
+            self.resolution_var.set("720p")
+            self.audio_bitrate_var.set("96k")
+        else:
+            self.encode_crf_var.set(18)
+            self.encode_preset_var.set("medium")
+            self.resolution_var.set("Original")
+            self.audio_bitrate_var.set("160k")
+        self.lbl_crf.config(text=str(self.encode_crf_var.get()))
+        self._update_mode_state()
                 
     # --- Logic ---
 
@@ -783,9 +834,23 @@ class ConverterApp(tk.Toplevel):
             mode = self.mode_var.get()
             crf = self.encode_crf_var.get()
             preset = self.encode_preset_var.get()
+            resolution = self.resolution_var.get()
+            audio_bitrate = self.audio_bitrate_var.get()
+            faststart = bool(self.faststart_var.get())
             out_dir = self.output_dir_var.get()
             
-            f = self.executor.submit(self._convert_file, iid, data["path"], out_dir, mode, crf, preset)
+            f = self.executor.submit(
+                self._convert_file,
+                iid,
+                data["path"],
+                out_dir,
+                mode,
+                crf,
+                preset,
+                resolution,
+                audio_bitrate,
+                faststart,
+            )
             data["future"] = f
             futures.append(f)
         
@@ -834,7 +899,7 @@ class ConverterApp(tk.Toplevel):
             self.tree.item(item_id, tags=(self._status_tag(status),))
             self._refresh_dashboard()
 
-    def _convert_file(self, item_id, input_path, out_dir, mode, crf, preset):
+    def _convert_file(self, item_id, input_path, out_dir, mode, crf, preset, resolution, audio_bitrate, faststart):
         # 1. Prepare
         if self._shutdown_event.is_set():
             self.after(0, self._update_item, item_id, "Cancelled", None)
@@ -857,7 +922,18 @@ class ConverterApp(tk.Toplevel):
         cmd = [self.ffmpeg_path, "-y", "-i", input_path, "-progress", "pipe:1", "-nostats"]
         
         if mode == "encode":
-            cmd += ["-c:v", "libx264", "-preset", preset, "-crf", str(crf), "-c:a", "aac", "-b:a", "192k"]
+            cmd += ["-c:v", "libx264", "-preset", preset, "-crf", str(crf)]
+            resolution_filters = {
+                "1080p": "scale=-2:1080",
+                "720p": "scale=-2:720",
+                "480p": "scale=-2:480",
+            }
+            scale_filter = resolution_filters.get(resolution)
+            if scale_filter:
+                cmd += ["-vf", scale_filter]
+            cmd += ["-c:a", "aac", "-b:a", audio_bitrate]
+            if faststart:
+                cmd += ["-movflags", "+faststart"]
         else:
             cmd += ["-c", "copy"]
             
@@ -928,24 +1004,23 @@ class ConverterApp(tk.Toplevel):
             converter_window = None
 
         if self._standalone_root is not None:
-            try:
-                self._standalone_root.destroy()
-            except Exception:
-                pass
+            cleanup_hidden_root(self._standalone_root)
 
 
-def open_converter_window(parent=None):
+def open_converter_window(parent=None, default_output_dir=None):
     """Open the converter as a centered child window."""
     global converter_window
 
     if converter_window is not None and converter_window.winfo_exists():
+        if default_output_dir:
+            converter_window.output_dir_var.set(str(default_output_dir))
         converter_window.deiconify()
         center_window(converter_window, parent)
         converter_window.lift()
         converter_window.focus_force()
         return converter_window
 
-    converter_window = ConverterApp(parent=parent)
+    converter_window = ConverterApp(parent=parent, default_output_dir=default_output_dir)
     if parent is not None and parent.winfo_exists():
         converter_window.transient(parent)
         converter_window.after_idle(lambda: center_window(converter_window, parent))

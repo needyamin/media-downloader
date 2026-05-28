@@ -1,121 +1,82 @@
 # Media Downloader
 
-### **One desktop app for your entire media workflow — download, queue, convert, cut out backgrounds, screenshot, and record.**
-
-Stop switching between a video downloader, a download manager, a converter, a background remover, and separate capture tools. **Media Downloader** puts six professional workflows behind one window — free, open source, and ready for **Windows** and **Linux**.
+One desktop app for downloading, converting, background removal, screenshots, and screen recording.
 
 <p align="center">
-  <strong>Free &nbsp;·&nbsp; MIT licensed &nbsp;·&nbsp; No account &nbsp;·&nbsp; No ads &nbsp;·&nbsp; Offline-first on your PC</strong>
+  <strong>Free · MIT licensed · No account · No ads · Offline-first</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/needyamin/media-downloader/releases"><strong>⬇ Download latest release</strong></a>
+  <a href="https://github.com/needyamin/media-downloader/releases"><strong>Download latest release</strong></a>
   &nbsp;|&nbsp;
   <a href="index.html">Landing page</a>
 </p>
 
 ---
 
-## The main idea
+## Overview
 
-| | |
+Media Downloader combines 6 tools into one desktop workspace:
+
+- Media download from supported public URLs (video/audio)
+- Direct file download queue with resume/history
+- Video conversion (FFmpeg-based)
+- AI background removal
+- Screenshot capture
+- Screen recording
+
+It is built for Windows and Linux, with one shared UI hub, tray actions, and keyboard shortcuts.
+
+---
+
+## Main Features
+
+- One launcher window for all tools
+- Shared managed FFmpeg workflow
+- Direct-download queue with persistent history
+- Local AI background remover (`rembg` + ONNX Runtime)
+- Screenshot and recording overlays with quick controls
+- Configurable behavior via `app_flags.json`
+
+---
+
+## Included Tools
+
+| Tool | Purpose |
 |---|---|
-| **What it is** | A single **media workstation** for your desktop |
-| **What you get** | **6 integrated tools** launched from one hub, tray, or hotkeys |
-| **Who it’s for** | Creators, students, power users, and anyone tired of tool sprawl |
-| **Why it matters** | **Save time, disk clutter, and context switching** — paste a link, open a tool, get a file |
-
-> **Marketing headline:** *Download it once. Do everything in one place.*
-
----
-
-## See it in action
-
-![Media Downloader — main window and integrated tools](https://github.com/user-attachments/assets/311e27ab-fda2-4234-98a8-d7fef466579e)
+| Media Downloader | Download video/audio from supported public sources |
+| Download List | Queue and manage direct file downloads |
+| Video Converter | Convert/remux with quality and size controls |
+| BG Remover | Remove image backgrounds and export PNG |
+| YScreenshot | Capture selected or full screen image |
+| YScreenRecorder | Record screen with pause/finish controls |
 
 ---
 
-## Why choose Media Downloader?
+## Install
 
-Most people juggle separate apps for each task. Media Downloader is built around one promise:
+### Windows
 
-**Everything you need for everyday media work lives in one install.**
+1. Download `MediaDownloader_Setup.exe` from [Releases](https://github.com/needyamin/media-downloader/releases)
+2. Run installer
+3. Launch Media Downloader
 
-| Instead of… | You use… |
-|-------------|----------|
-| A site downloader + a file download manager | **Streaming downloads** + **Download List** (IDM-style queue) |
-| A standalone FFmpeg GUI | **Video Converter** (shared engine, presets, batch queue) |
-| A web-based background remover | **BG Remover** (local AI, private on your machine) |
-| Extra screenshot / recorder apps | **YScreenshot** + **YScreenRecorder** (region pick, HUD, hotkeys) |
+### Linux
 
-**Differentiators that matter:**
+1. Download `Media-Downloader-x86_64.AppImage` from [Releases](https://github.com/needyamin/media-downloader/releases)
+2. Make executable and run:
 
-- **One hub** — menu bar, system tray, and Windows global shortcuts open every tool instantly  
-- **Smart downloads** — site URLs via `yt-dlp`; direct file links with pause, resume, and history  
-- **FFmpeg handled for you** on Windows — auto-detect, download, and update from Settings  
-- **Packaged for real users** — Windows installer and Linux AppImage, not “Python script only”  
-- **Respects your machine** — optional domain blocklist, configurable logging, organized output folders  
+```bash
+chmod +x Media-Downloader-x86_64.AppImage
+./Media-Downloader-x86_64.AppImage
+```
 
----
-
-## Six tools. One app.
-
-| Tool | Your benefit |
-|------|----------------|
-| **Media Downloader** | Paste a link → pick quality → get video or audio from supported public sites and playlists |
-| **Download List** | Queue direct files (`.mp4`, `.zip`, installers…) with pause, resume, and broken-link repair |
-| **Video Converter** | Batch-convert formats and quality without hunting for FFmpeg paths |
-| **BG Remover** | Remove image backgrounds with on-device AI — preview and export transparent PNG |
-| **YScreenshot** | Region or full-screen capture with a clean overlay workflow |
-| **YScreenRecorder** | Record your screen with a floating HUD — pause, finish, open output folder |
-
-Open any tool from **Tools** in the menu, the **tray**, or **keyboard shortcuts** (Windows).
-
----
-
-## Three pillars (how we talk about the product)
-
-### 1. Download — streaming and files
-
-- **Site & playlist URLs** — video/audio quality presets, playlist caps, clipboard auto-detect  
-- **Direct file URLs** — persistent queue, history, `.part` resume sidecars  
-- Output sorted into `video/`, `audio/`, `playlists/`, and your direct-download folder  
-
-### 2. Create — convert and polish
-
-- **Video Converter** — encode, remux, and batch jobs on one FFmpeg stack  
-- **BG Remover** — cutout studio with AI (`rembg` + ONNX Runtime)  
-
-### 3. Capture — screenshot and record
-
-| | YScreenshot | YScreenRecorder |
-|---|-------------|-----------------|
-| Region / full screen | ✓ | ✓ |
-| Overlay UI | Dimmed screen + controls | Bottom control bar + recording HUD |
-| Windows | Full support | FFmpeg `ddagrab` / `gdigrab` |
-| Linux X11 | Tool fallbacks + ImageGrab | `x11grab` via system FFmpeg |
-| Linux Wayland | `grim`, etc. | Guidance in-app (recording not built-in yet) |
-
-**Linux tip:** install host packages for best capture:  
+For best capture support on Linux, install:
 `ffmpeg` `ffprobe` `python3-tk` `xclip` `wl-clipboard` `grim` `gnome-screenshot` `scrot` `imagemagick`
 
 ---
 
-## Get started in 60 seconds
-
-### Windows
-
-1. [Download `MediaDownloader_Setup.exe`](https://github.com/needyamin/media-downloader/releases) from Releases  
-2. Run the installer  
-3. Launch **Media Downloader** — paste a URL or open **Download List** / **Tools**
-
-### Linux
-
-1. Download `Media-Downloader-x86_64.AppImage` from [Releases](https://github.com/needyamin/media-downloader/releases)  
-2. `chmod +x Media-Downloader-x86_64.AppImage` and run it  
-3. Install capture packages above if you use screenshot or recorder features  
-
-### From source (developers)
+## Run from Source
 
 ```bash
 git clone https://github.com/needyamin/media-downloader.git
@@ -126,91 +87,94 @@ python run.py
 
 ---
 
-## Windows shortcuts
+## Keyboard Shortcuts (Windows)
 
-| Shortcut | Opens |
-|----------|--------|
-| `Ctrl+Shift+V` | Video Converter |
-| `Ctrl+Shift+B` | BG Remover |
-| `Ctrl+Shift+Y` | YScreenshot |
-| `Ctrl+Shift+R` | YScreenRecorder |
+| Shortcut | Action |
+|---|---|
+| `Ctrl+Shift+V` | Open Video Converter |
+| `Ctrl+Shift+B` | Open BG Remover |
+| `Ctrl+Shift+Y` | Open YScreenshot |
+| `Ctrl+Shift+R` | Open YScreenRecorder |
 
-**While recording:** `Ctrl+Shift+P` pause/resume · `Ctrl+Shift+S` finish and save  
+While recording:
+- `Ctrl+Shift+P` pause/resume
+- `Ctrl+Shift+S` finish and save
 
 ---
 
-## Built for distribution
+## Build & Packaging
 
-| Platform | What users download | How maintainers build |
-|----------|---------------------|------------------------|
-| **Windows** | `MediaDownloader_Setup.exe` | `python src/desktop_tools/app/nutika_build.py` (+ [Inno Setup 6](https://jrsoftware.org/isdl.php)) |
-| **Linux** | `Media-Downloader-x86_64.AppImage` | `python3 src/desktop_tools/app/linux_appimage_build.py` (Linux or **WSL Ubuntu**) |
+| Platform | Build command | Output |
+|---|---|---|
+| Windows | `python -m desktop_tools.app.build_tools.nuitka` | `release/windows/MediaDownloader_Setup.exe` |
+| Linux | `python -m desktop_tools.app.build_tools.linux_appimage` | `release/linux/Media-Downloader-x86_64.AppImage` |
 
-Packaging is driven by **`build_manifest.py`** so every release automatically includes app modules, shared code, assets, and required libraries.
+Bundle manifest check:
 
-**WSL build (Windows → Linux AppImage):**
-
-```powershell
-wsl.exe -d Ubuntu -- sh -lc "cd /mnt/c/Users/<you>/Desktop/media-downloader && python3 src/desktop_tools/app/linux_appimage_build.py"
+```bash
+python -m desktop_tools.app.build_tools.manifest
 ```
 
-Output: `release/linux/Media-Downloader-x86_64.AppImage`
+WSL Linux build from Windows:
+
+```powershell
+wsl.exe -d Ubuntu -- sh -lc "cd /mnt/c/Users/<you>/Desktop/media-downloader && python3 -m desktop_tools.app.build_tools.linux_appimage"
+```
 
 ---
 
 ## Configuration
 
-Edit root **`app_flags.json`**:
+Global runtime behavior is controlled from root `app_flags.json`.
 
-| Key | Use |
-|-----|-----|
-| `debug_logging` | Quieter logs when `false` |
-| `disabled_domains` | Block specific sites (e.g. parental or policy control) |
-| `clipboard_poll_ms_*`, `max_log_lines` | Tune UI responsiveness and log size |
+Common keys:
+
+- `debug_logging`
+- `disabled_domains`
+- `clipboard_poll_ms_*`
+- `max_log_lines`
+- `hotkeys.*`
+- `versions.*`
+- `paths.*`
+- `themes.*`
 
 ---
 
-## For developers
-
-<details>
-<summary><strong>Project layout</strong></summary>
+## Project Structure
 
 ```text
 media-downloader/
-├── README.md · index.html · app_flags.json · run.py
+├── README.md
+├── index.html
+├── app_flags.json
+├── run.py
 └── src/desktop_tools/
-    ├── app/          # Hub, tools, build scripts, assets
-    └── shared/       # FFmpeg, direct download, capture helpers
+    ├── app/        # UI modules, orchestration, build tool modules
+    ├── shared/     # reusable services (ffmpeg, capture, downloads)
+    ├── tools/      # stable entrypoints, smoke checks, architecture guards
+    └── README.md   # desktop architecture notes
 ```
 
-</details>
+---
 
-<details>
-<summary><strong>Tech stack</strong></summary>
+## Tech Stack
 
-- **Runtime:** Python 3.12+ · `yt-dlp` · Pillow · pystray · customtkinter · rembg · onnxruntime  
-- **Windows:** pywin32 hotkeys · managed FFmpeg · Nuitka standalone + Inno installer  
-- **Linux:** PyInstaller onedir + AppImage · system FFmpeg for converter/recorder  
-
-</details>
-
-<details>
-<summary><strong>Windows code signing (optional)</strong></summary>
-
-SignPath workflow: `.github/workflows/windows-signpath.yml` — set `SIGNPATH_API_TOKEN`, `SIGNPATH_ORGANIZATION_ID`, `SIGNPATH_PROJECT_SLUG` in GitHub.
-
-</details>
+- Python 3.12+
+- `yt-dlp`, Pillow, `pystray`, `customtkinter`
+- `rembg`, `onnxruntime`
+- Packaging: Nuitka + Inno Setup (Windows), PyInstaller + AppImage flow (Linux)
 
 ---
 
 ## Legal
 
-**Educational and personal use only.** You are responsible for complying with copyright, platform terms of service, and local law. Do not download or redistribute content you do not have rights to use.
+Educational and personal use only.  
+Users are responsible for compliance with copyright law, platform terms, and local regulations.
 
 ---
 
-## Credits & license
+## Credits
 
-**Author:** [Md Yamin Hossain](https://github.com/needyamin)  
-**Packaging:** [ANSNEW TECH](https://inside.ansnew.com)  
-**License:** [MIT](LICENSE)
+- Author: [Md Yamin Hossain](https://github.com/needyamin)
+- Packaging: [ANSNEW TECH](https://inside.ansnew.com)
+- License: [MIT](LICENSE)
