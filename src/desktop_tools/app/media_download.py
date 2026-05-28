@@ -14,7 +14,7 @@ import ctypes
 from ctypes import wintypes
 import re
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 import validators
 import yt_dlp.postprocessor.ffmpeg
 import queue
@@ -919,6 +919,7 @@ def paste_clipboard_into_url_entry():
         try:
             url_entry.delete(0, tk.END)
             url_entry.insert(0, clipboard_text)
+            schedule_url_preview_refresh()
         except Exception:
             pass
 
@@ -2495,14 +2496,14 @@ def open_download_list_window(select_record_id=None):
     download_list_window = tk.Toplevel(root)
     download_list_window.title("Download List")
     download_list_window.configure(bg=THEME['bg'])
-    download_list_window.geometry("1080x620")
-    download_list_window.minsize(920, 520)
+    download_list_window.geometry("1160x700")
+    download_list_window.minsize(980, 560)
     apply_window_icon(download_list_window, app_id="needyamin.media_downloader")
     download_list_window.protocol("WM_DELETE_WINDOW", close_download_list_window)
     download_list_window.grid_rowconfigure(1, weight=1)
     download_list_window.grid_columnconfigure(0, weight=1)
 
-    def make_download_list_button(parent, text, command, *, bg, fg="white", active_bg=None, disabled_fg="#E2E8F0"):
+    def make_download_list_button(parent, text, command, *, bg, fg="white", active_bg=None, disabled_fg="#E2E8F0", compact=False):
         button = tk.Button(
             parent,
             text=text,
@@ -2516,65 +2517,67 @@ def open_download_list_window(select_record_id=None):
             relief='flat',
             bd=0,
             cursor='hand2',
-            padx=14,
-            pady=8,
+            padx=10 if compact else 14,
+            pady=6 if compact else 8,
             highlightthickness=0,
         )
         return button
 
-    header = tk.Frame(download_list_window, bg=THEME['bg'])
-    header.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 10))
+    header = tk.Frame(download_list_window, bg=THEME['light_gray'])
+    header.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
     header.grid_columnconfigure(0, weight=1)
 
     tk.Label(
         header,
         text="Download List",
-        font=('Segoe UI', 14, 'bold'),
-        bg=THEME['bg'],
+        font=('Segoe UI', 13, 'bold'),
+        bg=THEME['light_gray'],
         fg=THEME['fg'],
-    ).grid(row=0, column=0, sticky="w")
+    ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 2))
 
     tk.Label(
         header,
-        text="Queue direct downloads, resume them later, replace broken links, and manage completed history.",
-        font=('Segoe UI', 9),
-        bg=THEME['bg'],
+        text="IDM-style queue: add links, resume/pause, replace broken URLs, and manage history.",
+        font=('Segoe UI', 8),
+        bg=THEME['light_gray'],
         fg=THEME['gray'],
-    ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+    ).grid(row=1, column=0, sticky="w", padx=10, pady=(0, 8))
 
     actions = tk.Frame(download_list_window, bg=THEME['bg'])
-    actions.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
+    actions.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
     actions.grid_rowconfigure(2, weight=1)
     actions.grid_columnconfigure(0, weight=1)
 
-    top_buttons = tk.Frame(actions, bg=THEME['bg'])
-    top_buttons.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+    toolbar = tk.Frame(actions, bg=THEME['light_gray'])
+    toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+    toolbar.grid_columnconfigure(1, weight=1)
 
-    make_download_list_button(top_buttons, "Add Current URL", add_current_url_to_download_list, bg='#16A34A', active_bg='#15803D').pack(side='left', padx=(0, 8))
-    make_download_list_button(top_buttons, "Add URL", prompt_add_url_to_download_list, bg='#2563EB', active_bg='#1D4ED8').pack(side='left', padx=(0, 8))
+    left_toolbar = tk.Frame(toolbar, bg=THEME['light_gray'])
+    left_toolbar.grid(row=0, column=0, sticky="w", padx=8, pady=8)
+    make_download_list_button(left_toolbar, "Add Current URL", add_current_url_to_download_list, bg='#2563EB', active_bg='#1D4ED8', compact=True).pack(side='left', padx=(0, 6))
+    make_download_list_button(left_toolbar, "Add URL", prompt_add_url_to_download_list, bg='#1D4ED8', active_bg='#1E40AF', compact=True).pack(side='left', padx=(0, 6))
 
-    download_list_resume_btn = make_download_list_button(top_buttons, "Start / Resume", resume_selected_download_record, bg='#0EA5E9', active_bg='#0284C7')
-    download_list_resume_btn.pack(side='left', padx=(0, 8))
-    download_list_pause_btn = make_download_list_button(top_buttons, "Pause", pause_selected_download_record, bg='#D97706', active_bg='#B45309')
-    download_list_pause_btn.pack(side='left', padx=(0, 8))
-    download_list_cancel_btn = make_download_list_button(top_buttons, "Cancel", cancel_selected_download_record, bg='#DC2626', active_bg='#B91C1C')
-    download_list_cancel_btn.pack(side='left', padx=(0, 8))
-    download_list_replace_btn = make_download_list_button(top_buttons, "Replace Link", replace_selected_download_link, bg='#7C3AED', active_bg='#6D28D9')
+    download_list_resume_btn = make_download_list_button(left_toolbar, "Resume", resume_selected_download_record, bg='#0891B2', active_bg='#0E7490', compact=True)
+    download_list_resume_btn.pack(side='left', padx=(0, 6))
+    download_list_pause_btn = make_download_list_button(left_toolbar, "Pause", pause_selected_download_record, bg='#D97706', active_bg='#B45309', compact=True)
+    download_list_pause_btn.pack(side='left', padx=(0, 6))
+    download_list_cancel_btn = make_download_list_button(left_toolbar, "Cancel", cancel_selected_download_record, bg='#DC2626', active_bg='#B91C1C', compact=True)
+    download_list_cancel_btn.pack(side='left', padx=(0, 6))
+    download_list_replace_btn = make_download_list_button(left_toolbar, "Replace Link", replace_selected_download_link, bg='#7C3AED', active_bg='#6D28D9', compact=True)
     download_list_replace_btn.pack(side='left')
 
-    lower_buttons = tk.Frame(actions, bg=THEME['bg'])
-    lower_buttons.grid(row=1, column=0, sticky="ew", pady=(0, 10))
+    right_toolbar = tk.Frame(toolbar, bg=THEME['light_gray'])
+    right_toolbar.grid(row=0, column=1, sticky="e", padx=8, pady=8)
+    download_list_open_file_btn = make_download_list_button(right_toolbar, "Open File", open_selected_download_file, bg='#334155', active_bg='#1E293B', compact=True)
+    download_list_open_file_btn.pack(side='left', padx=(0, 6))
+    download_list_open_folder_btn = make_download_list_button(right_toolbar, "Open Folder", open_selected_download_folder, bg='#475569', active_bg='#334155', compact=True)
+    download_list_open_folder_btn.pack(side='left', padx=(0, 6))
+    download_list_delete_btn = make_download_list_button(right_toolbar, "Delete", delete_selected_download_record, bg='#92400E', active_bg='#78350F', compact=True)
+    download_list_delete_btn.pack(side='left', padx=(0, 6))
+    make_download_list_button(right_toolbar, "Clear Done", clear_finished_download_records, bg='#64748B', active_bg='#475569', compact=True).pack(side='left', padx=(0, 6))
+    make_download_list_button(right_toolbar, "Refresh", refresh_download_list_window, bg='#0F766E', active_bg='#0F5F59', compact=True).pack(side='left')
 
-    download_list_open_file_btn = make_download_list_button(lower_buttons, "Open File", open_selected_download_file, bg='#334155', active_bg='#1E293B')
-    download_list_open_file_btn.pack(side='left', padx=(0, 8))
-    download_list_open_folder_btn = make_download_list_button(lower_buttons, "Open Folder", open_selected_download_folder, bg='#475569', active_bg='#334155')
-    download_list_open_folder_btn.pack(side='left', padx=(0, 8))
-    download_list_delete_btn = make_download_list_button(lower_buttons, "Delete", delete_selected_download_record, bg='#92400E', active_bg='#78350F')
-    download_list_delete_btn.pack(side='left', padx=(0, 8))
-    make_download_list_button(lower_buttons, "Clear Finished", clear_finished_download_records, bg='#64748B', active_bg='#475569').pack(side='left', padx=(0, 8))
-    make_download_list_button(lower_buttons, "Refresh", refresh_download_list_window, bg='#0F766E', active_bg='#0F5F59').pack(side='left')
-
-    tree_frame = tk.Frame(actions, bg=THEME['bg'])
+    tree_frame = tk.Frame(actions, bg=THEME['light_gray'])
     tree_frame.grid(row=2, column=0, sticky="nsew")
     tree_frame.grid_rowconfigure(0, weight=1)
     tree_frame.grid_columnconfigure(0, weight=1)
@@ -2586,11 +2589,11 @@ def open_download_list_window(select_record_id=None):
     download_list_tree.heading("progress", text="Progress")
     download_list_tree.heading("size", text="Size")
     download_list_tree.heading("updated", text="Updated")
-    download_list_tree.column("status", width=120, anchor="w")
-    download_list_tree.column("name", width=360, anchor="w")
-    download_list_tree.column("progress", width=110, anchor="center")
-    download_list_tree.column("size", width=180, anchor="center")
-    download_list_tree.column("updated", width=160, anchor="center")
+    download_list_tree.column("status", width=130, anchor="w")
+    download_list_tree.column("name", width=420, anchor="w")
+    download_list_tree.column("progress", width=120, anchor="center")
+    download_list_tree.column("size", width=170, anchor="center")
+    download_list_tree.column("updated", width=170, anchor="center")
     download_list_tree.grid(row=0, column=0, sticky="nsew")
     download_list_tree.bind("<<TreeviewSelect>>", on_download_list_selection_change)
 
@@ -2598,8 +2601,8 @@ def open_download_list_window(select_record_id=None):
     tree_scroll.grid(row=0, column=1, sticky="ns")
     download_list_tree.configure(yscrollcommand=tree_scroll.set)
 
-    download_list_details_var = tk.StringVar(value="Select a download item to view details and actions.")
-    tk.Label(
+    download_list_details_var = tk.StringVar(value="Ready. Select a download item to view details and actions.")
+    status_bar = tk.Label(
         actions,
         textvariable=download_list_details_var,
         justify='left',
@@ -2608,9 +2611,10 @@ def open_download_list_window(select_record_id=None):
         fg=THEME['fg'],
         relief='flat',
         padx=10,
-        pady=10,
+        pady=8,
         wraplength=980,
-    ).grid(row=3, column=0, sticky="ew", pady=(12, 0))
+    )
+    status_bar.grid(row=3, column=0, sticky="ew", pady=(8, 0))
 
     refresh_download_list_window()
     if select_record_id:
@@ -3445,9 +3449,61 @@ url_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
 
 url_entry = ModernEntry(url_frame)
 url_entry.grid(row=1, column=0, sticky="ew", ipady=8)
+url_entry.bind("<KeyRelease>", lambda _event: schedule_url_preview_refresh())
+url_entry.bind("<FocusOut>", lambda _event: schedule_url_preview_refresh())
+
+URL_PREVIEW_THUMB_SIZE = (220, 124)
+
+url_preview_frame = tk.Frame(
+    url_frame,
+    bg=THEME['light_gray'],
+    bd=0,
+    relief='flat',
+    highlightthickness=1,
+    highlightbackground=THEME['border'],
+    highlightcolor=THEME['border'],
+)
+url_preview_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+url_preview_frame.grid_columnconfigure(1, weight=1)
+
+url_preview_thumb_wrap = tk.Frame(
+    url_preview_frame,
+    bg=THEME['light_gray'],
+    width=URL_PREVIEW_THUMB_SIZE[0],
+    height=URL_PREVIEW_THUMB_SIZE[1],
+)
+url_preview_thumb_wrap.grid(row=0, column=0, padx=12, pady=12, sticky="nw")
+url_preview_thumb_wrap.grid_propagate(False)
+
+url_preview_thumb_label = tk.Label(
+    url_preview_thumb_wrap,
+    bg=THEME['light_gray'],
+    anchor='center',
+)
+url_preview_thumb_label.pack(fill="both", expand=True)
+
+url_preview_text_var = tk.StringVar(value="Paste or type a supported URL to preview thumbnail and metadata.")
+url_preview_text_label = tk.Label(
+    url_preview_frame,
+    textvariable=url_preview_text_var,
+    font=('Segoe UI', 9),
+    bg=THEME['light_gray'],
+    fg=THEME['fg'],
+    anchor='nw',
+    justify='left',
+    wraplength=470,
+)
+url_preview_text_label.grid(row=0, column=1, padx=(0, 12), pady=12, sticky="nsew")
+
+url_preview_job = None
+url_preview_request_id = 0
+url_preview_image = None
+url_preview_visible = False
+
+url_preview_frame.grid_remove()
 
 download_path_frame = tk.Frame(url_frame, bg=THEME['bg'])
-download_path_frame.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+download_path_frame.grid(row=3, column=0, sticky="ew", pady=(10, 0))
 download_path_frame.grid_columnconfigure(1, weight=1)
 
 tk.Label(
@@ -3494,6 +3550,196 @@ status_label = tk.Label(
     fg=THEME['fg']
 )
 status_label.grid(row=1, column=0, sticky="w", padx=10, pady=(0, 10))
+
+def _format_duration_text(seconds):
+    try:
+        total = int(float(seconds))
+    except Exception:
+        return "Unknown"
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+def _apply_url_preview_result(request_id, url_snapshot, title, uploader, duration_text, source_label, thumb_pil_image):
+    global url_preview_image, url_preview_visible
+    current_url = ""
+    try:
+        current_url = url_entry.get().strip()
+    except Exception:
+        current_url = ""
+    if request_id != url_preview_request_id and current_url != (url_snapshot or "").strip():
+        return
+
+    if not url_preview_visible:
+        url_preview_frame.grid()
+        url_preview_visible = True
+
+    parts = []
+    if title:
+        parts.append(f"Title: {title}")
+    if uploader:
+        parts.append(f"Uploader: {uploader}")
+    if duration_text:
+        parts.append(f"Duration: {duration_text}")
+    if source_label:
+        parts.append(f"Source: {source_label}")
+
+    if parts:
+        url_preview_text_var.set("\n".join(parts))
+    else:
+        url_preview_text_var.set("Preview not available for this URL yet.")
+
+    if thumb_pil_image is not None:
+        url_preview_image = ImageTk.PhotoImage(thumb_pil_image)
+        url_preview_thumb_label.configure(image=url_preview_image, text="")
+    else:
+        url_preview_image = None
+        url_preview_thumb_label.configure(image="", text="")
+
+def _clear_url_preview(request_id, url_snapshot):
+    global url_preview_visible
+    current_url = ""
+    try:
+        current_url = url_entry.get().strip()
+    except Exception:
+        current_url = ""
+    if request_id != url_preview_request_id and current_url != (url_snapshot or "").strip():
+        return
+    if not url_preview_visible:
+        url_preview_frame.grid()
+        url_preview_visible = True
+    url_preview_text_var.set("No metadata available for this URL.")
+    url_preview_thumb_label.configure(image="", text="")
+
+def _fetch_url_preview_worker(url, request_id):
+    info = None
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,
+        'extract_flat': True,
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as preview_ydl:
+            info = preview_ydl.extract_info(url, download=False)
+    except Exception:
+        info = None
+
+    # Fallback for direct file URLs when yt-dlp metadata is unavailable.
+    if not info:
+        try:
+            direct_title = Path(urlparse(url).path).name or "Direct file"
+            if "%" in direct_title:
+                direct_title = unquote(direct_title)
+
+            headers = {}
+            try:
+                head_response = requests.head(url, timeout=8, allow_redirects=True)
+                headers = dict(head_response.headers or {})
+                if head_response.status_code >= 400:
+                    get_response = requests.get(url, timeout=8, allow_redirects=True, stream=True)
+                    headers = dict(get_response.headers or {})
+                    get_response.close()
+            except Exception:
+                headers = {}
+
+            content_type = (headers.get("Content-Type") or "").split(";")[0].strip()
+            content_length_raw = headers.get("Content-Length") or ""
+            size_text = ""
+            try:
+                size_bytes = int(content_length_raw)
+                if size_bytes > 0:
+                    size_text = humanize.naturalsize(size_bytes, binary=True)
+            except Exception:
+                size_text = ""
+
+            source_bits = ["Direct Download"]
+            if content_type:
+                source_bits.append(content_type)
+            if size_text:
+                source_bits.append(size_text)
+            source_label = " | ".join(source_bits)
+
+            root.after(
+                0,
+                lambda rid=request_id, u=url, t=direct_title, s=source_label:
+                _apply_url_preview_result(rid, u, t, "", "", s, None)
+            )
+            return
+        except Exception:
+            root.after(0, lambda rid=request_id, u=url: _clear_url_preview(rid, u))
+            return
+
+    if isinstance(info, dict) and info.get('_type') == 'playlist' and info.get('entries'):
+        first_entry = next((entry for entry in info.get('entries', []) if isinstance(entry, dict)), None)
+        if first_entry:
+            info = first_entry
+
+    title = str(info.get('title') or "Unknown title")
+    uploader = str(info.get('uploader') or info.get('channel') or "")
+    duration_text = _format_duration_text(info.get('duration'))
+    source_label = str(info.get('extractor_key') or info.get('extractor') or "")
+    thumbnail_url = info.get('thumbnail')
+
+    thumb_pil_image = None
+    if thumbnail_url:
+        try:
+            response = requests.get(thumbnail_url, timeout=8)
+            response.raise_for_status()
+            image = Image.open(io.BytesIO(response.content)).convert("RGB")
+            image.thumbnail(URL_PREVIEW_THUMB_SIZE, Image.Resampling.LANCZOS)
+            thumb_pil_image = image
+        except Exception:
+            thumb_pil_image = None
+
+    root.after(
+        0,
+        lambda rid=request_id, preview_url=url, t=title, u=uploader, d=duration_text, s=source_label, img=thumb_pil_image:
+        _apply_url_preview_result(rid, preview_url, t, u, d, s, img)
+    )
+
+def schedule_url_preview_refresh():
+    global url_preview_job, url_preview_request_id, url_preview_visible, url_preview_image
+    if 'url_entry' not in globals():
+        return
+
+    if url_preview_job is not None:
+        try:
+            root.after_cancel(url_preview_job)
+        except Exception:
+            pass
+        url_preview_job = None
+
+    def _run_preview():
+        global url_preview_request_id, url_preview_job, url_preview_visible, url_preview_image
+        url_preview_job = None
+        url = url_entry.get().strip()
+        if not url:
+            if url_preview_visible:
+                url_preview_frame.grid_remove()
+                url_preview_visible = False
+            url_preview_text_var.set("Paste or type a supported URL to preview thumbnail and metadata.")
+            url_preview_thumb_label.configure(image="", text="")
+            url_preview_image = None
+            return
+        if not url_preview_visible:
+            url_preview_frame.grid()
+            url_preview_visible = True
+        if not validators.url(url):
+            url_preview_text_var.set("Enter a valid URL to preview metadata.")
+            url_preview_thumb_label.configure(image="", text="")
+            url_preview_image = None
+            return
+        url_preview_text_var.set("Loading preview...")
+        url_preview_thumb_label.configure(image="", text="")
+        url_preview_image = None
+        url_preview_request_id += 1
+        request_id = url_preview_request_id
+        threading.Thread(target=_fetch_url_preview_worker, args=(url, request_id), daemon=True).start()
+
+    url_preview_job = root.after(450, _run_preview)
 
 # Process any early logs
 process_early_logs()
@@ -4802,6 +5048,7 @@ def check_clipboard():
                     url_entry.delete(0, tk.END)
                     url_entry.insert(0, recent_clipboard_urls[-1])
                     url_entry.icursor(tk.END)
+                    schedule_url_preview_refresh()
                     debug_log(f"Auto-filled latest clipboard URL: {clipboard_content}")
     except Exception as e:
         debug_print("Clipboard error:", e)
