@@ -53,10 +53,12 @@ class AssetManager:
             if os.path.exists(path):
                 try:
                     self.raw_images[key] = Image.open(path)
-                    print(f"Loaded asset: {key} ({self.raw_images[key].size})")
+                    if os.environ.get("ANIKA_DEBUG", "").strip().lower() in ("1", "true", "yes"):
+                        print(f"Loaded asset: {key} ({self.raw_images[key].size})")
                 except Exception as e:
-                    print(f"Error loading asset {key} from {path}: {e}")
-            else:
+                    if os.environ.get("ANIKA_DEBUG", "").strip().lower() in ("1", "true", "yes"):
+                        print(f"Error loading asset {key} from {path}: {e}")
+            elif os.environ.get("ANIKA_DEBUG", "").strip().lower() in ("1", "true", "yes"):
                 print(f"Warning: Asset file not found: {path}")
 
     def get_image(self, key, scale=0.8, flip_horizontal=False, squash_x=1.0, squash_y=1.0):

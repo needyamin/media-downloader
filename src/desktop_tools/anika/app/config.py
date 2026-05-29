@@ -5,7 +5,20 @@ import random
 # App directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESOURCES_DIR = os.path.join(BASE_DIR, "resources")
-USER_DATA_DIR = os.path.join(os.path.expanduser("~"), ".yamos_witch_mate")
+def _resolve_anika_user_data_dir() -> str:
+    """Use the hub app data folder when available; fall back for standalone Anika runs."""
+    try:
+        from desktop_tools.shared.user_data_paths import get_anika_user_dir
+
+        return str(get_anika_user_dir())
+    except Exception:
+        local_appdata = os.environ.get("LOCALAPPDATA", "")
+        if local_appdata:
+            return os.path.join(local_appdata, "Media Downloader", "anika")
+        return os.path.join(os.path.expanduser("~"), ".yamos_witch_mate")
+
+
+USER_DATA_DIR = _resolve_anika_user_data_dir()
 CONFIG_FILE = os.path.join(USER_DATA_DIR, "config.json")
 TODO_FILE = os.path.join(USER_DATA_DIR, "todo.json")
 SESSION_FILE = os.path.join(USER_DATA_DIR, "session.json")
@@ -36,6 +49,7 @@ DEFAULT_CONFIG = {
     # Drag to screen edge:
     "edge_hide_enabled": True,
     "edge_hide_mins": 5,       # Minutes Anika stays away after drag-to-edge
+    "edge_hide_offscreen_frac": 0.85,  # Fraction of sprite that must be off-screen to hide
 }
 
 # GUI Themes (hub_match = Media Downloader main app styling)

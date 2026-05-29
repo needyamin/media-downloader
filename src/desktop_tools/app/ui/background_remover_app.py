@@ -1,10 +1,12 @@
+import hashlib
 import os
+import queue
 import threading
 import tkinter as tk
 from tkinter import Tk, filedialog, ttk, StringVar, TclError, messagebox, Menu, Toplevel
 from tkinter.messagebox import showinfo, showerror
 import importlib
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 import requests
 import tempfile
 import sys
@@ -22,6 +24,7 @@ APP_DIR = Path(__file__).resolve().parent
 SRC_DIR = ensure_src_on_path(__file__)
 
 from desktop_tools.shared.resources import apply_window_icon, center_window
+from desktop_tools.shared.user_data_paths import get_bg_remover_diagnostics_path, get_rembg_models_dir
 from desktop_tools.app.config.runtime_flags import APP_VERSION_BG_REMOVER, get_tool_theme
 
 MISSING_DEPENDENCIES = []
@@ -38,9 +41,13 @@ def register_dependency_error(name, exc):
         DEPENDENCY_ERRORS[name] = f"{type(exc).__name__}: {exc}"
 
 try:
-    from rembg import remove as remove_background
+    from rembg import new_session, remove as rembg_remove
+
+    REMBG_AVAILABLE = True
 except BaseException as exc:
-    remove_background = None
+    rembg_remove = None
+    new_session = None
+    REMBG_AVAILABLE = False
     register_dependency_error("rembg", exc)
 
 try:
@@ -104,6 +111,549 @@ TEXT_SOFT = BACKGROUND_REMOVER_THEME["TEXT_SOFT"]
 DANGER_TEXT = BACKGROUND_REMOVER_THEME["DANGER_TEXT"]
 CHECKER_DARK = BACKGROUND_REMOVER_THEME["CHECKER_DARK"]
 CHECKER_LIGHT = BACKGROUND_REMOVER_THEME["CHECKER_LIGHT"]
+
+# rembg models: "classic" (smaller u2net family) vs "premium" (large optional downloads).
+REMBG_MODEL_INFO: dict[str, dict[str, object]] = {
+    "u2net": {
+        "short": "Classic",
+        "tier": "classic",
+        "download_mb": 176,
+        "detail": "Default remover. Small one-time download, then works offline.",
+    },
+    "u2net_human_seg": {
+        "short": "People (fast)",
+        "tier": "classic",
+        "download_mb": 176,
+        "detail": "Optimized for portraits and people.",
+    },
+    "u2netp": {
+        "short": "Lightweight",
+        "tier": "classic",
+        "download_mb": 4,
+        "detail": "Fastest classic model; lower quality on hard edges.",
+    },
+    "birefnet-general": {
+        "short": "Best quality (BiRefNet)",
+        "tier": "premium",
+        "download_mb": 973,
+        "detail": "Highest quality. Downloaded from the internet only when you select it and confirm.",
+    },
+    "bria-rmbg": {
+        "short": "BRIA RMBG",
+        "tier": "premium",
+        "download_mb": 1024,
+        "detail": "Strong alternative to BiRefNet; same optional download rules.",
+    },
+    "birefnet-portrait": {
+        "short": "Portraits (BiRefNet)",
+        "tier": "premium",
+        "download_mb": 973,
+        "detail": "Premium portrait model; optional large download.",
+    },
+}
+REMBG_MODEL_MENU_ORDER = (
+    "u2net",
+    "u2net_human_seg",
+    "u2netp",
+    "birefnet-general",
+    "bria-rmbg",
+    "birefnet-portrait",
+)
+PREMIUM_REMBG_MODELS = frozenset(
+    key for key, info in REMBG_MODEL_INFO.items() if info["tier"] == "premium"
+)
+CLASSIC_REMBG_MODELS = frozenset(
+    key for key, info in REMBG_MODEL_INFO.items() if info["tier"] == "classic"
+)
+CLASSIC_MODEL_FALLBACKS = ("u2net", "u2net_human_seg", "u2netp")
+PREMIUM_MODEL_FALLBACKS = ("birefnet-general", "bria-rmbg", "birefnet-portrait")
+DEFAULT_REMBG_MODEL = "u2net"
+MAX_INFERENCE_SIDE = 2048
+DOWNLOAD_CONNECT_TIMEOUT_SEC = 30
+DOWNLOAD_READ_TIMEOUT_SEC = 600
+DOWNLOAD_PROGRESS_INTERVAL_SEC = 0.12
+
+# Official rembg release URLs (same as rembg session classes).
+REMBG_MODEL_DOWNLOADS: dict[str, dict[str, str | None]] = {
+    "u2net": {
+        "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx",
+        "hash": "md5:60024c5c889badc19c04ad937298a77b",
+    },
+    "u2net_human_seg": {
+        "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx",
+        "hash": "md5:c09ddc2e0104f800e3e1bb4652583d1f",
+    },
+    "u2netp": {
+        "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx",
+        "hash": "md5:8e83ca70e441ab06c318d82300c84806",
+    },
+    "birefnet-general": {
+        "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-general-epoch_244.onnx",
+        "hash": "md5:7a35a0141cbbc80de11d9c9a28f52697",
+    },
+    "bria-rmbg": {
+        "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/bria-rmbg-2.0.onnx",
+        "hash": "sha256:5b486f08200f513f460da46dd701db5fbb47d79b4be4b708a19444bcd4e79958",
+    },
+    "birefnet-portrait": {
+        "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/BiRefNet-portrait-epoch_150.onnx",
+        "hash": "md5:c3a64a6abf20250d090cd055f12a3b67",
+    },
+}
+_REMBG_SESSION_CACHE: dict[str, object] = {}
+_REMBG_SESSION_LOCK = threading.Lock()
+
+
+def get_rembg_cache_dir() -> Path:
+    """Directory where rembg stores downloaded ONNX weights."""
+    override = os.environ.get("U2NET_HOME", "").strip()
+    if override:
+        return Path(override).expanduser()
+    return get_rembg_models_dir()
+
+
+def is_rembg_model_cached(model_name: str) -> bool:
+    """Return True when the ONNX file for this model is already on disk."""
+    if model_name not in REMBG_MODEL_INFO:
+        return False
+    model_path = get_rembg_cache_dir() / f"{model_name}.onnx"
+    return model_path.is_file() and model_path.stat().st_size > 0
+
+
+def is_premium_rembg_model(model_name: str) -> bool:
+    return model_name in PREMIUM_REMBG_MODELS
+
+
+def model_short_label(model_name: str) -> str:
+    info = REMBG_MODEL_INFO.get(model_name)
+    if not info:
+        return model_name
+    return str(info["short"])
+
+
+def model_menu_label(model_name: str) -> str:
+    """Human-readable dropdown label (static; see status line for install state)."""
+    info = REMBG_MODEL_INFO.get(model_name)
+    if not info:
+        return model_name
+    short = str(info["short"])
+    download_mb = int(info["download_mb"])
+    if info["tier"] == "premium":
+        return f"{short} — optional ~{download_mb} MB download"
+    return f"{short} — classic (~{download_mb} MB first run)"
+
+
+REMBG_MODEL_MENU_LABELS = {key: model_menu_label(key) for key in REMBG_MODEL_MENU_ORDER}
+REMBG_LABEL_TO_MODEL_KEY = {label: key for key, label in REMBG_MODEL_MENU_LABELS.items()}
+
+
+def resolve_model_key(selection: str | None = None) -> str:
+    """Map a dropdown label (or raw key) to a rembg model id."""
+    if not selection:
+        return DEFAULT_REMBG_MODEL
+    if selection in REMBG_MODEL_INFO:
+        return selection
+    return REMBG_LABEL_TO_MODEL_KEY.get(selection, DEFAULT_REMBG_MODEL)
+
+
+def _fallback_models_for(model_name: str) -> tuple[str, ...]:
+    """Only fall back within the same tier — never auto-download premium for classic users."""
+    if is_premium_rembg_model(model_name):
+        pool = PREMIUM_MODEL_FALLBACKS
+    else:
+        pool = CLASSIC_MODEL_FALLBACKS
+    chain: list[str] = []
+    for candidate in (model_name, *pool):
+        if candidate in REMBG_MODEL_INFO and candidate not in chain:
+            chain.append(candidate)
+    return tuple(chain)
+
+
+def describe_model_choice(model_name: str) -> str:
+    info = REMBG_MODEL_INFO.get(model_name, {})
+    detail = str(info.get("detail", ""))
+    if is_rembg_model_cached(model_name):
+        path = get_rembg_cache_dir() / f"{model_name}.onnx"
+        size_mb = path.stat().st_size / (1024 * 1024)
+        return (
+            f"{model_short_label(model_name)} is already downloaded on this PC "
+            f"({size_mb:.0f} MB at {path}). No download needed. {detail}"
+        )
+    download_mb = int(info.get("download_mb", 0))
+    return (
+        f"{model_short_label(model_name)} is not downloaded yet (~{download_mb} MB). "
+        f"The blue download progress bar in this window will appear when you process an image. {detail}"
+    )
+
+
+def model_ready_message(model_name: str) -> str:
+    """Message when weights are already on disk."""
+    path = get_rembg_cache_dir() / f"{model_name}.onnx"
+    size_mb = path.stat().st_size / (1024 * 1024)
+    return (
+        f"{model_short_label(model_name)} is already downloaded.\n\n"
+        f"Folder: {path.parent}\n"
+        f"File: {path.name}\n"
+        f"Size: about {size_mb:.0f} MB\n\n"
+        "No internet download is required. Click OK to start removing the background."
+    )
+
+
+def _throttled_progress(on_progress, interval: float = DOWNLOAD_PROGRESS_INTERVAL_SEC):
+    """Wrap a progress callback so the UI is not flooded with thousands of updates."""
+    if on_progress is None:
+        return None
+
+    state = {"last_time": 0.0, "last_pct": -1.0}
+
+    def report(percent: float | None, message: str, *, force: bool = False):
+        now = time.monotonic()
+        if not force and percent is not None:
+            if (
+                now - state["last_time"] < interval
+                and abs(percent - state["last_pct"]) < 0.4
+                and percent < 99.9
+            ):
+                return
+            state["last_pct"] = percent
+        state["last_time"] = now
+        on_progress(percent, message)
+
+    return report
+
+
+def _parse_known_hash(known_hash: str | None) -> tuple[str | None, str | None]:
+    if not known_hash:
+        return None, None
+    if ":" in known_hash:
+        algorithm, digest = known_hash.split(":", 1)
+        return algorithm.lower(), digest.lower()
+    return "md5", known_hash.lower()
+
+
+def _verify_model_file_hash(
+    model_path: Path,
+    known_hash: str | None,
+    on_progress=None,
+) -> None:
+    algorithm, expected = _parse_known_hash(known_hash)
+    if not algorithm or not expected:
+        return
+
+    reporter = _throttled_progress(on_progress)
+    if reporter:
+        reporter(None, f"Verifying {algorithm.upper()} checksum…", force=True)
+
+    hasher = hashlib.new(algorithm)
+    total_size = model_path.stat().st_size
+    bytes_read = 0
+    with open(model_path, "rb") as handle:
+        while chunk := handle.read(8 * 1024 * 1024):
+            hasher.update(chunk)
+            bytes_read += len(chunk)
+            if reporter and total_size > 0:
+                pct = 100.0 * bytes_read / total_size
+                done_mb = bytes_read / (1024 * 1024)
+                total_mb = total_size / (1024 * 1024)
+                reporter(
+                    pct,
+                    f"Verifying… {done_mb:.1f} / {total_mb:.1f} MB ({pct:.1f}%)",
+                )
+
+    if hasher.hexdigest() != expected:
+        try:
+            model_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise RuntimeError(
+            "Downloaded model file failed checksum verification. "
+            "Check your internet connection and try again."
+        )
+
+
+def _download_url_to_file(
+    url: str,
+    dest_path: Path,
+    on_progress=None,
+) -> None:
+    """Stream-download a model file with real byte progress (GitHub releases)."""
+    reporter = _throttled_progress(on_progress)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = dest_path.with_suffix(dest_path.suffix + ".part")
+    if temp_path.exists():
+        try:
+            temp_path.unlink()
+        except OSError:
+            pass
+
+    if reporter:
+        reporter(0.0, "Connecting to GitHub…", force=True)
+
+    try:
+        response = requests.get(
+            url,
+            stream=True,
+            timeout=(DOWNLOAD_CONNECT_TIMEOUT_SEC, DOWNLOAD_READ_TIMEOUT_SEC),
+            headers={"User-Agent": "MediaDownloader-BackgroundRemover/1.0"},
+        )
+        response.raise_for_status()
+    except requests.exceptions.Timeout as exc:
+        raise RuntimeError(
+            "Connection to the download server timed out. Check your internet and try again."
+        ) from exc
+    except requests.exceptions.RequestException as exc:
+        raise RuntimeError(f"Could not reach the download server: {exc}") from exc
+
+    total_size = int(response.headers.get("content-length", 0))
+    downloaded = 0
+
+    if reporter and total_size <= 0:
+        reporter(None, "Downloading… total size unknown, please wait…", force=True)
+
+    try:
+        with open(temp_path, "wb") as handle:
+            for chunk in response.iter_content(chunk_size=256 * 1024):
+                if not chunk:
+                    continue
+                handle.write(chunk)
+                downloaded += len(chunk)
+                if reporter and total_size > 0:
+                    pct = min(100.0, 100.0 * downloaded / total_size)
+                    done_mb = downloaded / (1024 * 1024)
+                    total_mb = total_size / (1024 * 1024)
+                    reporter(
+                        pct,
+                        f"Downloading… {done_mb:.1f} / {total_mb:.1f} MB ({pct:.1f}%)",
+                    )
+                elif reporter:
+                    done_mb = downloaded / (1024 * 1024)
+                    reporter(None, f"Downloading… {done_mb:.1f} MB received")
+    except requests.exceptions.Timeout as exc:
+        raise RuntimeError(
+            "Download stalled or timed out. Check your internet and try again."
+        ) from exc
+    finally:
+        response.close()
+
+    if downloaded <= 0:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise RuntimeError("Download returned no data from the server.")
+
+    temp_path.replace(dest_path)
+    if reporter:
+        reporter(100.0, "Download complete — verifying file…", force=True)
+
+
+def _download_via_rembg_pooch(model_name: str, on_progress=None) -> Path:
+    """Fallback: use rembg's built-in pooch downloader."""
+    from rembg.sessions import sessions_class
+
+    session_class = None
+    for candidate in sessions_class:
+        if candidate.name() == model_name:
+            session_class = candidate
+            break
+    if session_class is None:
+        raise ValueError(f"Unknown rembg model: {model_name}")
+
+    reporter = _throttled_progress(on_progress)
+    if reporter:
+        reporter(0.0, "Connecting (rembg downloader)…", force=True)
+
+    class _PoochProgressBridge:
+        def __init__(self):
+            self.total = 0
+            self.count = 0
+
+        def update(self, n):
+            self.count = min(self.count + n, self.total or self.count + n)
+            if reporter and self.total > 0:
+                pct = min(100.0, 100.0 * self.count / self.total)
+                done_mb = self.count / (1024 * 1024)
+                total_mb = self.total / (1024 * 1024)
+                reporter(
+                    pct,
+                    f"Downloading… {done_mb:.1f} / {total_mb:.1f} MB ({pct:.1f}%)",
+                )
+
+        def reset(self):
+            self.count = 0
+
+        def close(self):
+            if reporter:
+                reporter(100.0, "Download complete — verifying file…", force=True)
+
+    import pooch
+
+    original_retrieve = pooch.retrieve
+    bridge = _PoochProgressBridge()
+
+    def retrieve_with_progress(*args, progressbar=False, **kwargs):
+        return original_retrieve(*args, progressbar=bridge, **kwargs)
+
+    pooch.retrieve = retrieve_with_progress
+    try:
+        session_class.download_models()
+    finally:
+        pooch.retrieve = original_retrieve
+
+    return get_rembg_cache_dir() / f"{model_name}.onnx"
+
+
+def ensure_rembg_model_downloaded(
+    model_name: str,
+    on_progress=None,
+) -> Path:
+    """
+    Download rembg ONNX weights if missing. Calls on_progress(percent, message)
+    where percent may be None when total size is unknown.
+    """
+    model_path = get_rembg_cache_dir() / f"{model_name}.onnx"
+    if model_path.is_file() and model_path.stat().st_size > 0:
+        reporter = _throttled_progress(on_progress)
+        if reporter:
+            reporter(100.0, "Model already on this PC — skipping download.", force=True)
+        return model_path
+
+    if not REMBG_AVAILABLE:
+        raise RuntimeError("rembg is not available")
+
+    spec = REMBG_MODEL_DOWNLOADS.get(model_name)
+    if spec and spec.get("url"):
+        _download_url_to_file(str(spec["url"]), model_path, on_progress=on_progress)
+        _verify_model_file_hash(model_path, spec.get("hash"), on_progress=on_progress)
+    else:
+        model_path = _download_via_rembg_pooch(model_name, on_progress=on_progress)
+
+    if not model_path.is_file():
+        raise RuntimeError(f"Download finished but model file is missing: {model_path}")
+
+    reporter = _throttled_progress(on_progress)
+    if reporter:
+        reporter(100.0, "Model saved — ready to use.", force=True)
+    return model_path
+
+
+def _normalize_input_image(image: Image.Image) -> Image.Image:
+    """Convert any mode to RGB for rembg (flatten alpha onto white)."""
+    if image.mode == "RGBA":
+        flat = Image.new("RGB", image.size, (255, 255, 255))
+        flat.paste(image, mask=image.split()[3])
+        return flat
+    if image.mode != "RGB":
+        return image.convert("RGB")
+    return image
+
+
+def _resize_for_inference(image: Image.Image, max_side: int = MAX_INFERENCE_SIDE) -> tuple[Image.Image, float]:
+    """Downscale very large photos so inference stays fast and stable."""
+    width, height = image.size
+    longest = max(width, height)
+    if longest <= max_side:
+        return image, 1.0
+    scale = max_side / float(longest)
+    new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+    return image.resize(new_size, Image.Resampling.LANCZOS), scale
+
+
+def _get_rembg_session(
+    model_name: str,
+    *,
+    allow_download: bool = True,
+    on_download_progress=None,
+):
+    """Load and cache an ONNX session."""
+    if not REMBG_AVAILABLE or new_session is None:
+        raise RuntimeError("rembg is not available")
+
+    if (
+        is_premium_rembg_model(model_name)
+        and not allow_download
+        and not is_rembg_model_cached(model_name)
+    ):
+        raise RuntimeError(
+            f"{model_short_label(model_name)} is not installed. "
+            "Select it in the model menu and confirm the download, or choose a classic model."
+        )
+
+    if allow_download and not is_rembg_model_cached(model_name):
+        ensure_rembg_model_downloaded(model_name, on_progress=on_download_progress)
+
+    with _REMBG_SESSION_LOCK:
+        cached = _REMBG_SESSION_CACHE.get(model_name)
+        if cached is not None:
+            return cached
+        session = new_session(model_name)
+        _REMBG_SESSION_CACHE[model_name] = session
+        return session
+
+
+def remove_image_background(
+    image: Image.Image,
+    *,
+    model_name: str = DEFAULT_REMBG_MODEL,
+    alpha_matting: bool = True,
+    allow_model_download: bool = True,
+    on_download_progress=None,
+) -> Image.Image:
+    """
+    Remove background using rembg.
+
+    Classic models (u2net family) are used by default. Premium models (BiRefNet, BRIA)
+    are only loaded when allow_model_download is True (user confirmed in the GUI).
+  """
+    if not REMBG_AVAILABLE or rembg_remove is None:
+        raise RuntimeError("rembg is not available")
+
+    if model_name not in REMBG_MODEL_INFO:
+        model_name = DEFAULT_REMBG_MODEL
+
+    original_size = image.size
+    rgb = _normalize_input_image(image)
+    work, scale = _resize_for_inference(rgb)
+
+    models_to_try = _fallback_models_for(model_name)
+    last_error: Exception | None = None
+    for candidate in models_to_try:
+        if (
+            is_premium_rembg_model(candidate)
+            and not allow_model_download
+            and not is_rembg_model_cached(candidate)
+        ):
+            continue
+        try:
+            session = _get_rembg_session(
+                candidate,
+                allow_download=allow_model_download,
+                on_download_progress=on_download_progress,
+            )
+            output = rembg_remove(
+                work,
+                session=session,
+                alpha_matting=alpha_matting,
+                alpha_matting_foreground_threshold=240,
+                alpha_matting_background_threshold=10,
+                alpha_matting_erode_size=10,
+                post_process_mask=True,
+            )
+            if not isinstance(output, Image.Image):
+                output = Image.fromarray(output)
+            if output.mode != "RGBA":
+                output = output.convert("RGBA")
+            if scale < 1.0:
+                output = output.resize(original_size, Image.Resampling.LANCZOS)
+            return output
+        except Exception as exc:
+            last_error = exc
+            with _REMBG_SESSION_LOCK:
+                _REMBG_SESSION_CACHE.pop(candidate, None)
+            log(f"rembg model '{candidate}' failed: {exc}")
+
+    raise RuntimeError(f"Background removal failed: {last_error}")
+
 
 def log(message):
     """Simple logging function"""
@@ -179,7 +729,7 @@ def write_dependency_diagnostics_report(details_text):
     global DEPENDENCY_DIAGNOSTICS_REPORT
 
     try:
-        report_path = Path(tempfile.gettempdir()) / "media_downloader_bg_remover_diagnostics.txt"
+        report_path = get_bg_remover_diagnostics_path()
         report_path.write_text(details_text, encoding="utf-8")
         DEPENDENCY_DIAGNOSTICS_REPORT = report_path
         return report_path
@@ -221,9 +771,20 @@ class BackgroundRemoverApp:
         self.processed_details_var = StringVar(
             value="The cutout result will appear here with a transparent preview."
         )
+        self.model_var = StringVar(value=REMBG_MODEL_MENU_LABELS[DEFAULT_REMBG_MODEL])
+        self.model_hint_var = StringVar(value=describe_model_choice(DEFAULT_REMBG_MODEL))
+        self.refine_edges_var = tk.BooleanVar(value=True)
+        self._last_model_key = DEFAULT_REMBG_MODEL
+        self._premium_download_approved: set[str] = {
+            key for key in PREMIUM_REMBG_MODELS if is_rembg_model_cached(key)
+        }
+        self._notified_installed_models: set[str] = set()
+        self._worker_queue: queue.Queue = queue.Queue()
+        self._worker_poll_job = None
 
         self._build_ui()
         self._refresh_preview_panels()
+        self._start_worker_queue_polling()
 
         self.master.after_idle(lambda: center_window(self.master, self.master.master if isinstance(self.master, Toplevel) else None))
 
@@ -347,7 +908,19 @@ class BackgroundRemoverApp:
             text="Background Remover Studio",
             text_color=TEXT_MAIN,
             font=("Segoe UI", 26, "bold"),
-        ).grid(row=0, column=0, sticky="w", padx=24, pady=(20, 8))
+        ).grid(row=0, column=0, sticky="w", padx=24, pady=(20, 4))
+
+        ctk.CTkLabel(
+            self.header_card,
+            text=(
+                "Classic rembg models work out of the box (small first-time download). "
+                "BiRefNet / BRIA are optional best-quality models — large download only if you pick them."
+            ),
+            text_color=TEXT_SOFT,
+            font=("Segoe UI", 11),
+            wraplength=920,
+            justify="left",
+        ).grid(row=1, column=0, sticky="w", padx=24, pady=(0, 16))
 
         self.toolbar_card = ctk.CTkFrame(
             self.main_frame,
@@ -391,6 +964,116 @@ class BackgroundRemoverApp:
         )
         self.clear_button.pack(side='left')
 
+        self.settings_row = ctk.CTkFrame(self.toolbar_card, fg_color="transparent")
+        self.settings_row.pack(fill='x', padx=20, pady=(0, 6))
+
+        ctk.CTkLabel(
+            self.settings_row,
+            text="AI model",
+            text_color=TEXT_MUTED,
+            font=("Segoe UI", 11, "bold"),
+        ).pack(side='left', padx=(0, 10))
+
+        self.model_menu = ctk.CTkOptionMenu(
+            self.settings_row,
+            variable=self.model_var,
+            values=[REMBG_MODEL_MENU_LABELS[key] for key in REMBG_MODEL_MENU_ORDER],
+            width=340,
+            height=34,
+            corner_radius=12,
+            fg_color=SECONDARY_BUTTON,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_HOVER,
+            dropdown_fg_color=SURFACE_BG,
+            dropdown_hover_color=SECONDARY_BUTTON_HOVER,
+            text_color=TEXT_MAIN,
+            font=("Segoe UI", 11),
+            command=self._on_model_changed,
+        )
+        self.model_menu.pack(side='left', padx=(0, 14))
+        self._sync_model_menu_to_key(DEFAULT_REMBG_MODEL)
+        self._update_model_hint(DEFAULT_REMBG_MODEL)
+
+        self.refine_switch = ctk.CTkSwitch(
+            self.settings_row,
+            text="Refine edges (hair & fine detail)",
+            variable=self.refine_edges_var,
+            onvalue=True,
+            offvalue=False,
+            font=("Segoe UI", 11),
+            text_color=TEXT_MAIN,
+            progress_color=ACCENT,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_HOVER,
+        )
+        self.refine_switch.pack(side='left', padx=(0, 12))
+
+        self._create_toolbar_chip(
+            self.settings_row,
+            "Classic default · premium optional",
+        )
+
+        self.model_hint_label = ctk.CTkLabel(
+            self.toolbar_card,
+            textvariable=self.model_hint_var,
+            text_color=TEXT_MUTED,
+            anchor="w",
+            justify="left",
+            wraplength=1100,
+            font=("Segoe UI", 11),
+        )
+        self.model_hint_label.pack(fill='x', padx=22, pady=(0, 6))
+
+        self.download_panel = ctk.CTkFrame(
+            self.toolbar_card,
+            fg_color=HEADER_BADGE_BG,
+            corner_radius=14,
+            border_width=2,
+            border_color=ACCENT,
+        )
+        self.download_title_var = StringVar(value="Downloading AI model")
+        self.download_percent_var = StringVar(value="0%")
+        self.download_status_var = StringVar(value="Preparing download…")
+
+        download_inner = ctk.CTkFrame(self.download_panel, fg_color="transparent")
+        download_inner.pack(fill="x", padx=18, pady=16)
+
+        header_row = ctk.CTkFrame(download_inner, fg_color="transparent")
+        header_row.pack(fill="x")
+
+        ctk.CTkLabel(
+            header_row,
+            textvariable=self.download_title_var,
+            text_color=TEXT_MAIN,
+            font=("Segoe UI", 15, "bold"),
+        ).pack(side="left")
+
+        ctk.CTkLabel(
+            header_row,
+            textvariable=self.download_percent_var,
+            text_color=ACCENT,
+            font=("Segoe UI", 22, "bold"),
+        ).pack(side="right")
+
+        self.download_progress = ctk.CTkProgressBar(
+            download_inner,
+            height=22,
+            corner_radius=10,
+            progress_color=ACCENT,
+            fg_color=CANVAS_BG,
+        )
+        self.download_progress.pack(fill="x", pady=(12, 8))
+        self.download_progress.set(0)
+
+        ctk.CTkLabel(
+            download_inner,
+            textvariable=self.download_status_var,
+            text_color=TEXT_MUTED,
+            font=("Segoe UI", 11),
+            anchor="w",
+            justify="left",
+        ).pack(fill="x")
+
         self.progress_bar = ttk.Progressbar(
             self.toolbar_row,
             mode='indeterminate',
@@ -399,14 +1082,15 @@ class BackgroundRemoverApp:
         )
         self.progress_bar.pack(side='right', padx=(12, 0), pady=8)
 
-        ctk.CTkLabel(
+        self.status_label = ctk.CTkLabel(
             self.toolbar_card,
             textvariable=self.status_var,
             text_color=TEXT_MAIN,
             anchor="w",
             justify="left",
             font=("Segoe UI", 12, "bold"),
-        ).pack(fill='x', padx=22, pady=(0, 14))
+        )
+        self.status_label.pack(fill='x', padx=22, pady=(0, 14))
         self._set_save_button_enabled(False)
 
         self.image_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
@@ -483,6 +1167,169 @@ class BackgroundRemoverApp:
         canvas.bind("<Configure>", self._schedule_preview_refresh)
 
         return {"card": card, "canvas": canvas}
+
+    def _start_worker_queue_polling(self):
+        """Poll worker callbacks on the Tk main thread (required on Python 3.14+)."""
+        self._poll_worker_queue()
+
+    def _poll_worker_queue(self):
+        while True:
+            try:
+                callback = self._worker_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                callback()
+            except Exception as exc:
+                log(f"Background remover UI callback failed: {exc}")
+
+        try:
+            if self.master.winfo_exists():
+                self._worker_poll_job = self.master.after(100, self._poll_worker_queue)
+        except TclError:
+            self._worker_poll_job = None
+
+    def _run_on_ui_thread(self, callback):
+        """Schedule UI work from a background thread without calling Tkinter off-thread."""
+        self._worker_queue.put(callback)
+
+    def _stop_worker_queue_polling(self):
+        job = self._worker_poll_job
+        self._worker_poll_job = None
+        if job is None:
+            return
+        try:
+            self.master.after_cancel(job)
+        except TclError:
+            pass
+
+    def _resolve_model_key(self, selection: str | None = None) -> str:
+        return resolve_model_key(selection or self.model_var.get())
+
+    def _sync_model_menu_to_key(self, model_key: str):
+        label = REMBG_MODEL_MENU_LABELS.get(model_key, model_menu_label(model_key))
+        self.model_var.set(label)
+
+    def _update_model_hint(self, model_key: str):
+        self.model_hint_var.set(describe_model_choice(model_key))
+
+    def _notify_model_already_downloaded(self, model_key: str):
+        """Update hint once per session when the user picks an already-local model."""
+        if model_key in self._notified_installed_models:
+            return
+        if not is_rembg_model_cached(model_key):
+            return
+        self._notified_installed_models.add(model_key)
+        self._update_model_hint(model_key)
+
+    def _show_download_panel(self, model_key: str):
+        """Show the large in-window download progress bar (always visible in this tool)."""
+        info = REMBG_MODEL_INFO.get(model_key, {})
+        short = model_short_label(model_key)
+        download_mb = int(info.get("download_mb", 0))
+        self.download_title_var.set(f"Downloading {short} (~{download_mb} MB)")
+        self.download_percent_var.set("0%")
+        self.download_status_var.set("Connecting to GitHub…")
+        self.download_progress.set(0)
+        self.download_panel.pack(fill="x", padx=22, pady=(4, 10), before=self.status_label)
+        self.upload_button.configure(state="disabled")
+        self.model_menu.configure(state="disabled")
+        self.master.update_idletasks()
+
+    def _hide_download_panel(self):
+        self.download_panel.pack_forget()
+        self.upload_button.configure(state="normal")
+        self.model_menu.configure(state="normal")
+
+    def _update_download_panel(self, percent: float | None, message: str):
+        self.download_status_var.set(message)
+        self.status_var.set(f"Download in progress — {message}")
+        if percent is None:
+            self.download_percent_var.set("…")
+            self.download_progress.set(0.08)
+        else:
+            pct = max(0.0, min(100.0, percent))
+            self.download_percent_var.set(f"{pct:.1f}%")
+            self.download_progress.set(pct / 100.0)
+        try:
+            self.master.update_idletasks()
+        except TclError:
+            pass
+
+    def _set_processing_phase(self, model_label: str):
+        """Reuse the same panel while the image is being cut out (after download)."""
+        self.download_title_var.set(f"Removing background — {model_label}")
+        self.download_percent_var.set("")
+        self.download_status_var.set("Running AI on your image…")
+        self.download_progress.set(0)
+        if not self.download_panel.winfo_ismapped():
+            self.download_panel.pack(fill="x", padx=22, pady=(4, 10), before=self.status_label)
+
+    def _make_download_progress_callback(self):
+        def on_progress(percent: float | None, message: str):
+            self._run_on_ui_thread(lambda: self._update_download_panel(percent, message))
+
+        return on_progress
+
+    def _premium_download_message(self, model_key: str) -> str:
+        info = REMBG_MODEL_INFO[model_key]
+        return (
+            f"{info['short']} is an optional high-quality model.\n\n"
+            f"Size: about {int(info['download_mb'])} MB\n"
+            f"Source: downloaded once from the internet (GitHub / rembg releases)\n"
+            f"After that it runs fully offline.\n\n"
+            "Download this model now?"
+        )
+
+    def _ensure_premium_download_allowed(self, model_key: str, *, confirm: bool = True) -> bool:
+        """Return True when a premium model may be loaded (cached or user approved)."""
+        if not is_premium_rembg_model(model_key):
+            return True
+        if is_rembg_model_cached(model_key):
+            self._premium_download_approved.add(model_key)
+            return True
+        if model_key in self._premium_download_approved:
+            return True
+        if not confirm:
+            return False
+        approved = messagebox.askyesno(
+            "Download optional AI model?",
+            self._premium_download_message(model_key),
+            parent=self.master,
+        )
+        if approved:
+            self._premium_download_approved.add(model_key)
+            return True
+        return False
+
+    def _on_model_changed(self, selection: str):
+        model_key = self._resolve_model_key(selection)
+        if is_premium_rembg_model(model_key) and not self._ensure_premium_download_allowed(model_key):
+            self._sync_model_menu_to_key(self._last_model_key)
+            self._update_model_hint(self._last_model_key)
+            self.status_var.set("Kept classic model — premium download cancelled.")
+            return
+
+        self._last_model_key = model_key
+        self._sync_model_menu_to_key(model_key)
+        self._update_model_hint(model_key)
+        if is_rembg_model_cached(model_key):
+            self._notify_model_already_downloaded(model_key)
+            self.status_var.set(
+                f"{model_short_label(model_key)} is already downloaded — ready to use."
+            )
+        elif is_premium_rembg_model(model_key):
+            self.status_var.set(
+                f"Selected {model_short_label(model_key)}. "
+                "A download progress bar will appear in this window when you choose an image."
+            )
+        else:
+            self.status_var.set(
+                f"Selected {model_short_label(model_key)}. "
+                "First use shows the download bar below (~{0} MB).".format(
+                    int(REMBG_MODEL_INFO[model_key]["download_mb"])
+                )
+            )
 
     def _schedule_preview_refresh(self, _event=None):
         if self._redraw_job is not None:
@@ -589,8 +1436,11 @@ class BackgroundRemoverApp:
             )
 
         if self.processed_image is not None:
+            model_label = model_short_label(self._resolve_model_key())
+            refine = "refined edges" if self.refine_edges_var.get() else "standard edges"
             self.processed_details_var.set(
-                f"Transparent PNG preview  •  {self.processed_image.width} x {self.processed_image.height}"
+                f"Transparent PNG  •  {self.processed_image.width} x {self.processed_image.height}"
+                f"  •  {model_label}  •  {refine}"
             )
         else:
             self.processed_details_var.set(
@@ -643,6 +1493,9 @@ class BackgroundRemoverApp:
         """Close only this tool window."""
         global background_remover_window
 
+        self._stop_worker_queue_polling()
+        self._hide_download_panel()
+
         if background_remover_window is not None and self.master == background_remover_window:
             background_remover_window.destroy()
             background_remover_window = None
@@ -668,8 +1521,12 @@ class BackgroundRemoverApp:
 
 Created by Md. Yamin Hossain
 
-This application helps you remove backgrounds from images 
-using advanced AI technology.
+This application removes backgrounds locally with rembg.
+
+Classic u2net models are the default. BiRefNet and BRIA are
+optional premium models — they download from the internet only
+if you select them and confirm. Edge refinement helps hair and
+fine detail on any model.
 
 © 2025 All rights reserved."""
         messagebox.showinfo("About", about_text)
@@ -683,23 +1540,62 @@ using advanced AI technology.
 
     def process_image(self, file_path):
         self.original_path = file_path
-        self.status_var.set("Removing the background... Please wait")
-        self.progress_bar.start()
-        
+        model_name = self._resolve_model_key()
+        if not self._ensure_premium_download_allowed(model_name):
+            self.status_var.set("Processing cancelled — premium model not downloaded.")
+            return
+
+        alpha_matting = bool(self.refine_edges_var.get())
+        model_label = model_short_label(model_name)
+        model_cached = is_rembg_model_cached(model_name)
+
+        needs_download_ui = not model_cached
+        allow_download = (
+            not is_premium_rembg_model(model_name)
+            or model_name in self._premium_download_approved
+        )
+
+        if model_cached:
+            self.status_var.set(f"Using downloaded {model_label} — removing background…")
+            self._set_processing_phase(model_label)
+            self.progress_bar.start()
+        else:
+            self.status_var.set(
+                f"Watch the blue download bar below — {model_label} "
+                f"(~{int(REMBG_MODEL_INFO[model_name]['download_mb'])} MB)"
+            )
+            self._show_download_panel(model_name)
+
         def process():
             try:
-                # Load image data off the UI thread, then marshal UI work back to Tk.
+                progress_cb = self._make_download_progress_callback() if needs_download_ui else None
+
                 original = Image.open(file_path)
                 original.load()
 
-                # Remove background while preserving quality
-                output = remove_background(original)
-                self.master.after(0, lambda: self._finish_processing(original, output))
-                
+                if needs_download_ui:
+                    self._run_on_ui_thread(
+                        lambda: self._set_processing_phase(model_label)
+                    )
+                    self._run_on_ui_thread(self.progress_bar.start)
+
+                output = remove_image_background(
+                    original,
+                    model_name=model_name,
+                    alpha_matting=alpha_matting,
+                    allow_model_download=allow_download,
+                    on_download_progress=progress_cb,
+                )
+                self._run_on_ui_thread(lambda: self._finish_processing(original, output))
             except Exception as e:
-                self.master.after(0, lambda: self._handle_processing_error(str(e)))
+                error_message = str(e)
+                self._run_on_ui_thread(lambda: self._handle_processing_error(error_message))
             finally:
-                self.master.after(0, self.progress_bar.stop)
+                def cleanup():
+                    self._hide_download_panel()
+                    self.progress_bar.stop()
+
+                self._run_on_ui_thread(cleanup)
 
         threading.Thread(target=process, daemon=True).start()
 
@@ -735,6 +1631,25 @@ using advanced AI technology.
             except Exception as e:
                 showerror("Error", f"Failed to save image: {str(e)}")
 
+    def _compose_on_checkerboard(self, image: Image.Image) -> Image.Image:
+        """Flatten RGBA onto a checkerboard so Tk preview shows transparency correctly."""
+        if image.mode != "RGBA":
+            return image.convert("RGB")
+
+        width, height = image.size
+        background = Image.new("RGB", (width, height), CHECKER_DARK)
+        tile = 14
+        draw = ImageDraw.Draw(background)
+        for x in range(0, width, tile):
+            for y in range(0, height, tile):
+                color = CHECKER_LIGHT if ((x // tile) + (y // tile)) % 2 else CHECKER_DARK
+                draw.rectangle(
+                    (x, y, min(x + tile, width), min(y + tile, height)),
+                    fill=color,
+                )
+        background.paste(image, mask=image.split()[3])
+        return background
+
     def display_image(self, image, canvas, maintain_aspect=True, transparent=False):
         canvas.update_idletasks()
 
@@ -762,6 +1677,10 @@ using advanced AI technology.
 
         # Resize image while maintaining quality
         resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        if transparent and resized_image.mode == "RGBA":
+            resized_image = self._compose_on_checkerboard(resized_image)
+        elif resized_image.mode not in ("RGB", "L"):
+            resized_image = resized_image.convert("RGB")
         
         # Convert to PhotoImage and display
         tk_image = ImageTk.PhotoImage(resized_image)
@@ -1020,6 +1939,20 @@ def open_background_remover(parent=None):
     background_remover_window.lift()
     background_remover_window.focus_force()
     return background_remover_window
+
+
+def force_close_background_remover_if_open() -> None:
+    """Close the background remover without prompting (hub shutdown)."""
+    global background_remover_window
+    window = background_remover_window
+    if window is None:
+        return
+    try:
+        if window.winfo_exists():
+            window.destroy()
+    except Exception:
+        pass
+    background_remover_window = None
 
 if __name__ == "__main__":
     open_background_remover()

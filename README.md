@@ -64,7 +64,7 @@ Highlights:
 - Drag to a **screen edge** to hide her for a configurable time (default 5 minutes)
 - Right-click menu and **Settings → Actions** for spell book, timer, force actions, and quit
 - Mascot size, opacity, language, personality, and visual effects
-- Settings stored in `%USERPROFILE%\.yamos_witch_mate\config.json` (Linux: `~/.yamos_witch_mate/config.json`)
+- Settings stored in `%LOCALAPPDATA%\Media Downloader\` (Anika: `anika\`, BG remover models: `rembg_models\`, ffmpeg, updates). Legacy folders `.yamos_witch_mate` and `.u2net` are migrated automatically and removed on uninstall.
 
 ---
 
@@ -157,13 +157,23 @@ python -m desktop_tools.app.build_tools.manifest
 | Windows | `python -m desktop_tools.app.build_tools.nuitka` | `release/windows/MediaDownloader_Setup.exe` |
 | Linux | `python -m desktop_tools.app.build_tools.linux_appimage` | `release/linux/Media-Downloader-x86_64.AppImage` |
 
+### GitHub releases (auto-update + protected binaries)
+
+Pushing a version tag builds **compiled** Windows and Linux artifacts only — no Python source is attached to the release.
+
+1. Tag and push: `git tag v2.0.1` then `git push origin v2.0.1`
+2. GitHub Actions (`.github/workflows/release.yml`) runs Nuitka + Inno Setup (Windows) and PyInstaller + AppImage (Linux), then publishes a GitHub Release with `MediaDownloader_Setup.exe`, `Media-Downloader-x86_64.AppImage`, and `SHA256SUMS.txt`.
+3. Installed apps compare their bundled version (`app_flags.json`) to [releases/latest](https://github.com/needyamin/media-downloader/releases/latest) and silently install a newer `MediaDownloader_Setup.exe` when available (`updates.packaged_auto_update` in `app_flags.json`).
+
+Manual CI run: **Actions → Release (Nuitka + AppImage) → Run workflow** and enter a version like `2.0.1`.
+
 WSL Linux build from Windows:
 
 ```powershell
 wsl.exe -d Ubuntu -- sh -lc "cd /mnt/c/Users/<you>/Desktop/media-downloader && python3 -m desktop_tools.app.build_tools.linux_appimage"
 ```
 
-Packaged builds include `src/desktop_tools/anika/` (mascot assets and entry script).
+Packaged builds bundle `src/desktop_tools/anika/` (sprites, Python sources, settings GUI). Windows installers also build `Anika.exe` beside `Media-Downloader.exe` so Tools → Anika works in the frozen app.
 
 ---
 
@@ -182,7 +192,7 @@ Common keys:
 - `paths.*`
 - `themes.*`
 
-Anika-specific settings (break timing, edge hide, mascot size, etc.) live in the user config file under `.yamos_witch_mate/`, not in `app_flags.json`.
+Anika-specific settings (break timing, edge hide, mascot size, etc.) live under `%LOCALAPPDATA%\Media Downloader\anika\`, not in `app_flags.json`. Uninstalling via the Windows installer removes that folder, downloaded AI models, ffmpeg cache, and legacy `.u2net` / `.yamos_witch_mate` data (not your Downloads folder).
 
 ---
 

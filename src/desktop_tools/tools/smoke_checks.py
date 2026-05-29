@@ -83,6 +83,27 @@ def check_anika_launcher_resolution() -> None:
     print(f"OK anika: launcher resolves to {resolved}")
 
 
+def check_build_manifest_anika() -> None:
+    import importlib
+
+    build_manifest_mod = importlib.import_module("desktop_tools.app.build_tools.build_manifest")
+
+    build_manifest_mod.validate_source_tree()
+    modules = build_manifest_mod.discover_anika_module_names()
+    if not modules:
+        raise SystemExit("build manifest: no Anika modules discovered")
+    data_files = build_manifest_mod.discover_anika_data_files()
+    if not data_files:
+        raise SystemExit("build manifest: no Anika data files discovered")
+    nuitka_args = build_manifest_mod.nuitka_data_file_arguments()
+    if not any("anika" in arg for arg in nuitka_args):
+        raise SystemExit("build manifest: Anika missing from Nuitka data arguments")
+    linux_args = build_manifest_mod.linux_pyinstaller_data_arguments(os.pathsep)
+    if not any("anika" in arg for arg in linux_args):
+        raise SystemExit("build manifest: Anika missing from Linux PyInstaller data arguments")
+    print(f"OK build manifest: {len(modules)} Anika modules, {len(data_files)} data files")
+
+
 def main() -> None:
     for module_name in MODULES:
         importlib.import_module(module_name)
@@ -106,6 +127,7 @@ def main() -> None:
 
     check_anika_launcher_resolution()
     check_anika_assets_subprocess()
+    check_build_manifest_anika()
 
     print("Smoke checks passed.")
 

@@ -10,6 +10,13 @@ import time
 
 from app.config import config_db, get_speech_bubble, get_time_aware_speech, session_memory, get_personality
 from app.assets import AssetManager, BASE_SPRITE_HEIGHT
+from app.edge_hide import (
+    classify_edge_hide,
+    hide_threshold_px,
+    pointer_exit_side,
+    sprite_offscreen_amounts as edge_sprite_offscreen_amounts,
+    sprite_screen_bounds,
+)
 from app.particles import ParticleSystem
 from app.window_detector import WindowDetector
 from app.tray import TrayIcon
@@ -161,6 +168,16 @@ class DesktopPet(tk.Tk):
         self.drag_init_y = 0
         self.is_dragging = False
         self._drag_hidden_timer = None
+        self._edge_hide_side = None
+        self._edge_return_phase = None
+        self._edge_return_timer = 0.0
+        self._edge_sneak_target_x = 0
+        self._edge_jump_x = 0
+        self._edge_sneak_target_y = 0
+        self._edge_jump_y = 0
+        self._edge_hide_min_drag_px = 80
+        self._drag_cursor_offscreen = False
+        self._drag_exit_side = None
 
         # Speech bubble
         self.speech_bubble_id = None
@@ -403,41 +420,161 @@ class DesktopPet(tk.Tk):
         mins = max(1.0, min(60.0, mins))
         return int(mins * 60 * 1000)
 
-    def _is_dragged_to_screen_edge(self, wl, wt, wr, wb) -> bool:
-        """True when the pet was released against a screen edge (works with boundary_keep)."""
-        if not self.pet_config.get("edge_hide_enabled"):
-            return False
-        margin = max(10, int(self.pet_config.get("edge_hide_threshold_px") or 36))
-        return (
-            self.x <= wl + margin
-            or self.x + self.width >= wr - margin
-            or self.y <= wt + margin
-            or self.y + self.height >= wb - margin
+    def _sprite_metrics(self, img_key="dragged"):
+        scale = float(self.pet_config.get("scale") or 1.4)
+        flip_h = not self.facing_left
+        tk_img = self.assets.get_image(img_key, scale, flip_h, self.squash_x, self.squash_y)
+        if tk_img:
+            return tk_img.width(), tk_img.height()
+        char_size = int(BASE_SPRITE_HEIGHT * scale)
+        return char_size, char_size
+
+    def _sprite_offscreen_amounts(self, wl, wt, wr, wb):
+        char_w, char_h = self._sprite_metrics("dragged")
+        sl, st, sr, sb = sprite_screen_bounds(
+            float(self.x), float(self.y), float(self.width), float(self.height),
+            float(char_w), float(char_h),
+        )
+        return edge_sprite_offscreen_amounts(sl, st, sr, sb, wl, wt, wr, wb)
+
+    def _hide_offscreen_threshold(self) -> int:
+        _, char_h = self._sprite_metrics("dragged")
+        frac = float(self.pet_config.get("edge_hide_offscreen_frac") or 0.85)
+        return hide_threshold_px(char_h, frac)
+
+    def _max_y_above_taskbar(self, wb) -> int:
+        return wb - self.height
+
+    def _clamp_on_screen(self) -> None:
+        wl, wt, wr, wb = get_work_area()
+        max_x = wr - self.width
+        max_y = self._max_y_above_taskbar(wb)
+        self.x = min(max(wl, int(self.x)), max(wl, max_x))
+        self.y = min(max(wt, int(self.y)), max(wt, max_y))
+        self.geometry(f"+{self.x}+{self.y}")
+
+    def _classify_drag_drop(self, wl, wt, wr, wb):
+        left_off, right_off, top_off, _bottom_off = self._sprite_offscreen_amounts(wl, wt, wr, wb)
+        bl, bt, br, bb = self.get_boundaries()
+        dist = math.sqrt((self.x - self.drag_init_x) ** 2 + (self.y - self.drag_init_y) ** 2)
+        return classify_edge_hide(
+            edge_hide_enabled=bool(self.pet_config.get("edge_hide_enabled")),
+            cursor_offscreen=self._drag_cursor_offscreen,
+            exit_side=self._drag_exit_side,
+            dist_moved=dist,
+            min_drag_px=self._edge_hide_min_drag_px,
+            left_off=left_off,
+            right_off=right_off,
+            top_off=top_off,
+            threshold_px=self._hide_offscreen_threshold(),
+            at_taskbar=self.y >= bb - 6,
         )
 
-    def _begin_edge_hide(self) -> None:
-        """Hide Anika after the user drags her to a screen edge."""
-        self.set_state("drag_hidden")
+    def _anchor_on_taskbar(self, wl, wt, wr, wb) -> None:
+        self.is_anchored = True
+        self.on_window_perch = False
         self.vx = 0
         self.vy = 0
-        mins = max(1, int(float(self.pet_config.get("edge_hide_mins") or 5)))
-        lang = self.pet_config.get("language")
-        if lang == "en":
-            msg = f"Okay! I'll be back in {mins} minutes."
-        elif lang == "bn":
-            msg = f"ঠিক আছে! {mins} মিনিট পর ফিরব।"
+        self.x = min(max(wl, self.x), max(wl, wr - self.width))
+        self.y = wb - self.height
+        self.geometry(f"+{self.x}+{self.y}")
+        self.set_state("tea")
+        self.show_speech_bubble(
+            "আমি এখানেই বসে থাকবো!\n(I'll sit right here above the taskbar!)",
+            color="#bbf7d0",
+            duration=2500,
+        )
+
+    def _begin_side_edge_hide(self, side: str) -> None:
+        self._edge_hide_side = side
+        self.is_anchored = False
+        self.on_window_perch = False
+        self.vx = 0
+        self.vy = 0
+
+        wl, wt, wr, wb = get_work_area()
+        if side == "left":
+            self.x = wl - self.width + 5
+            self.facing_left = False
+        elif side == "right":
+            self.x = wr - 5
+            self.facing_left = True
         else:
-            msg = f"Okay! {mins} min পর ফিরছি / Back in {mins} min!"
-        self.show_speech_bubble(msg, color="#c084fc", duration=2800)
+            self.x = min(max(wl, self.x), max(wl, wr - self.width))
+            self.y = wt - self.height + 5
+        if side in ("left", "right"):
+            self.y = self._safe_randint(max(wt, wb - self.height - 220), max(wt, wb - self.height))
+        self.geometry(f"+{self.x}+{self.y}")
+        self.clear_speech_bubble()
+        self.set_state("drag_hidden")
+
         if self._drag_hidden_timer:
             try:
                 self.after_cancel(self._drag_hidden_timer)
             except Exception:
                 pass
-        self._drag_hidden_timer = self.after(self._edge_hide_delay_ms(), self._recover_from_drag_hidden)
+        self._drag_hidden_timer = self.after(self._edge_hide_delay_ms(), self._edge_hide_sneak_return)
 
+    def _edge_hide_sneak_return(self) -> None:
+        if self.state != "drag_hidden":
+            return
+
+        side = self._edge_hide_side or "left"
+        wl, wt, wr, wb = get_work_area()
+        self._drag_hidden_timer = None
+        self._edge_return_phase = "sneak_in"
+        self._edge_return_timer = 0.0
+        self.peek_edge = side
+
+        sneak_amount = min(160, max(90, self.width // 2))
+        if side == "left":
+            self.x = wl - self.width + 8
+            self._edge_sneak_target_x = wl - self.width + sneak_amount
+            self._edge_jump_x = min(wr - self.width, wl + 40)
+            self.facing_left = False
+        elif side == "right":
+            self.x = wr - 8
+            self._edge_sneak_target_x = wr - sneak_amount
+            self._edge_jump_x = max(wl, wr - self.width - 40)
+            self.facing_left = True
+        else:
+            self.y = wt - self.height + 8
+            self._edge_sneak_target_y = wt - self.height + sneak_amount
+            self._edge_jump_y = min(wb - self.height, wt + 40)
+            self.x = min(max(wl, self.x), max(wl, wr - self.width))
+
+        if side in ("left", "right"):
+            self.y = self._safe_randint(max(wt + 20, wb - self.height - 180), max(wt + 20, wb - self.height))
+        self.vx = 0
+        self.vy = 0
+        self.set_state("edge_return")
+        self.geometry(f"+{self.x}+{self.y}")
+
+    def _finish_edge_jump_scare(self) -> None:
+        lang = self.pet_config.get("language")
+        if lang == "en":
+            msg = "😲 BOO! Did I scare you?"
+        elif lang == "bn":
+            msg = "😲 ভূত! চমকে গেলে তো!"
+        else:
+            msg = "😲 BOO! চমকে গেলে? / Did I scare you?"
+        play_sound("error")
+        self.particles.add_lightning_bolt(self.width / 2, self.height / 2 - 20, count=6)
+        self.particles.add_sparks(self.width / 2, self.height / 2, count=14)
+        self.set_state("shocked")
+        self.show_speech_bubble(msg, color="#fca5a5", duration=2800)
+        self._edge_return_phase = "done"
+        self._edge_hide_side = None
     def start_drag(self, event):
+        if self._drag_hidden_timer:
+            try:
+                self.after_cancel(self._drag_hidden_timer)
+            except Exception:
+                pass
+            self._drag_hidden_timer = None
         self.is_dragging = True
+        self._drag_cursor_offscreen = False
+        self._drag_exit_side = None
         self.drag_start_x = event.x
         self.drag_start_y = event.y
         self.drag_init_x = self.winfo_x()
@@ -460,9 +597,33 @@ class DesktopPet(tk.Tk):
         self.y = self.winfo_y() + dy
 
         if self.pet_config.get("boundary_keep"):
-            wl, wt, wr, wb = self.get_boundaries()
-            self.x = max(wl, min(self.x, wr))
-            self.y = max(wt, min(self.y, wb))
+            screen_wl, screen_wt, screen_wr, screen_wb = get_work_area()
+            max_y = self._max_y_above_taskbar(screen_wb)
+            bl, bt, br, bb = self.get_boundaries()
+
+            pos = self._safe_pointer_xy()
+            if pos is None:
+                px, py = self.x + event.x, self.y + event.y
+            else:
+                px, py = pos
+
+            exit_side = pointer_exit_side(px, py, screen_wl, screen_wt, screen_wr, screen_wb)
+            allow_offscreen = self.pet_config.get("edge_hide_enabled") and exit_side is not None
+
+            if allow_offscreen:
+                self._drag_cursor_offscreen = True
+                self._drag_exit_side = exit_side
+                peek = max(28, int(BASE_SPRITE_HEIGHT * float(self.pet_config.get("scale") or 1.4) * 0.08))
+                if exit_side == "left":
+                    self.x = max(screen_wl - self.width + peek, self.x)
+                elif exit_side == "right":
+                    self.x = min(screen_wr - peek, self.x)
+                elif exit_side == "top":
+                    self.y = max(screen_wt - self.height + peek, self.y)
+                self.y = min(self.y, max_y)
+            else:
+                self.x = max(bl, min(self.x, br))
+                self.y = max(bt, min(self.y, bb))
 
         self.geometry(f"+{self.x}+{self.y}")
 
@@ -538,53 +699,33 @@ class DesktopPet(tk.Tk):
                 )
         else:
             wl, wt, wr, wb = get_work_area()
-            half_w = self.width // 2
-            half_h = self.height // 2
+            drop = None
+            if self.pet_config.get("edge_hide_enabled"):
+                drop = self._classify_drag_drop(wl, wt, wr, wb)
+            else:
+                bl, bt, br, bb = self.get_boundaries()
+                if dist_moved >= self._edge_hide_min_drag_px and self.y >= bb - 6:
+                    drop = "taskbar"
 
-            # Drag to screen edge → hide for configured minutes
-            if self._is_dragged_to_screen_edge(wl, wt, wr, wb):
-                self._begin_edge_hide()
+            if drop == "taskbar":
+                self._anchor_on_taskbar(wl, wt, wr, wb)
+                return
+            if drop == "hide_left":
+                self._begin_side_edge_hide("left")
+                return
+            if drop == "hide_right":
+                self._begin_side_edge_hide("right")
+                return
+            if drop == "hide_top":
+                self._begin_side_edge_hide("top")
                 return
 
-            # Fallback when boundaries are off: fully off-screen release
-            if not self.pet_config.get("boundary_keep") and (
-                self.x + self.width < wl + half_w
-                or self.x > wr + half_w
-                or self.y + self.height < wt + half_h
-                or self.y > wb + half_h
-            ):
-                self._begin_edge_hide()
-                return
-
-            # Check if dragged onto the bottom taskbar edge to sit/anchor
-            if self.y + self.height >= wb - 20:
-                self.is_anchored = True
-                self.set_state("tea")
-                self.show_speech_bubble("আমি এখানেই বসে থাকবো!\n(I'll sit right here!)", color="#bbf7d0", duration=2500)
-                self.vx = 0
-                self.vy = 0
-                return
-
-            # Dragged away from taskbar — clear anchor
             self.is_anchored = False
-            
+
             if self.pet_config.get("gravity_enabled"):
                 self.state = "idle"
             else:
                 self.set_state("idle")
-
-    def _recover_from_drag_hidden(self):
-        if self.state == "drag_hidden":
-            wl, wt, wr, wb = get_work_area()
-            self.x = int((wl + wr) / 2 - self.width / 2)
-            self.y = wb - self.height
-            self.vx = 0
-            self.vy = 0
-            self._drag_hidden_timer = None
-            self.set_state("idle")
-            self.geometry(f"+{self.x}+{self.y}")
-            self.particles.add_sparks(self.width / 2, self.height / 2, count=8)
-            self.show_speech_bubble("তা-দা! আমি ফিরে এসেছি!\n(Ta-da! I'm back!)", color="#c084fc", duration=3000)
 
     def _trigger_annoyed(self):
         """Anika gets annoyed from rapid clicking."""
@@ -802,7 +943,34 @@ class DesktopPet(tk.Tk):
         self.magic_circle_ids = []
 
     # ─── Core Update Loop (60 FPS) ────────────────────────────────────
+    def _safe_pointer_xy(self):
+        """Return mouse position or None if the window/pointer is unavailable."""
+        try:
+            if not self.winfo_exists():
+                return None
+            return self.winfo_pointerx(), self.winfo_pointery()
+        except (KeyboardInterrupt, tk.TclError):
+            return None
+        except Exception:
+            return None
+
     def update_loop(self):
+        try:
+            if not self.winfo_exists():
+                return
+            self._update_loop_frame()
+        except (KeyboardInterrupt, tk.TclError):
+            return
+        except Exception:
+            pass
+
+        try:
+            if self.winfo_exists():
+                self.after(16, self.update_loop)
+        except (KeyboardInterrupt, tk.TclError):
+            pass
+
+    def _update_loop_frame(self):
         scale = self.pet_config.get("scale")
 
         # Squash/stretch interpolation
@@ -878,30 +1046,33 @@ class DesktopPet(tk.Tk):
 
             # ─ Horizontal state movement ─
             if self.state == "chase":
-                mx = self.winfo_pointerx()
-                my = self.winfo_pointery()
-                cx = self.x + self.width / 2
-                cy = self.y + self.height / 2
-                dx = mx - cx
-                dy = my - cy
-                dist = math.sqrt(dx ** 2 + dy ** 2)
-                self.chase_timer += 0.016
-                if dist > 20:
-                    speed = self.move_speed * 2.5
-                    self.vx = (dx / dist) * speed
-                    self.vy = (dy / dist) * speed
-                    self.x += int(self.vx)
-                    self.y += int(self.vy)
-                    self.facing_left = (dx < 0)
-                    if config_db.get("magic_trail_enabled") and random.random() < 0.4:
-                        self.particles.add_magic_trail(self.width / 2, self.height - 30)
+                pos = self._safe_pointer_xy()
+                if pos is None:
+                    pass
                 else:
-                    self.vx = 0
-                    self.vy = 0
-                    if random.random() < 0.05:
-                        self.particles.add_hearts(self.width / 2, self.height / 2, count=2)
-                if self.chase_timer > 10.0:
-                    self.set_state("idle")
+                    mx, my = pos
+                    cx = self.x + self.width / 2
+                    cy = self.y + self.height / 2
+                    dx = mx - cx
+                    dy = my - cy
+                    dist = math.sqrt(dx ** 2 + dy ** 2)
+                    self.chase_timer += 0.016
+                    if dist > 20:
+                        speed = self.move_speed * 2.5
+                        self.vx = (dx / dist) * speed
+                        self.vy = (dy / dist) * speed
+                        self.x += int(self.vx)
+                        self.y += int(self.vy)
+                        self.facing_left = (dx < 0)
+                        if config_db.get("magic_trail_enabled") and random.random() < 0.4:
+                            self.particles.add_magic_trail(self.width / 2, self.height - 30)
+                    else:
+                        self.vx = 0
+                        self.vy = 0
+                        if random.random() < 0.05:
+                            self.particles.add_hearts(self.width / 2, self.height / 2, count=2)
+                    if self.chase_timer > 10.0:
+                        self.set_state("idle")
 
             elif self.state == "hide":
                 self.hide_timer += 0.016
@@ -936,6 +1107,48 @@ class DesktopPet(tk.Tk):
                 # Magic trail during broom flight
                 if config_db.get("magic_trail_enabled") and random.random() < 0.4:
                     self.particles.add_magic_trail(self.width / 2, self.height - 30)
+
+            elif self.state == "edge_return":
+                phase = self._edge_return_phase
+                side = self._edge_hide_side or "left"
+                if phase == "sneak_in":
+                    if side == "top":
+                        dy = self._edge_sneak_target_y - self.y
+                        if abs(dy) > 3:
+                            self.y += 4 if dy > 0 else -4
+                        else:
+                            self.y = self._edge_sneak_target_y
+                            self._edge_return_phase = "pause"
+                            self._edge_return_timer = 0.0
+                    else:
+                        dx = self._edge_sneak_target_x - self.x
+                        if abs(dx) > 3:
+                            self.x += 4 if dx > 0 else -4
+                        else:
+                            self.x = self._edge_sneak_target_x
+                            self._edge_return_phase = "pause"
+                            self._edge_return_timer = 0.0
+                elif phase == "pause":
+                    self._edge_return_timer += 0.016
+                    if self._edge_return_timer > 1.4:
+                        self._edge_return_phase = "jump_scare"
+                elif phase == "jump_scare":
+                    if side == "top":
+                        target = self._edge_jump_y
+                        dy = target - self.y
+                        if abs(dy) > 10:
+                            self.y += int(dy * 0.45)
+                        else:
+                            self.y = target
+                            self._finish_edge_jump_scare()
+                    else:
+                        target = self._edge_jump_x
+                        dx = target - self.x
+                        if abs(dx) > 10:
+                            self.x += int(dx * 0.45)
+                        else:
+                            self.x = target
+                            self._finish_edge_jump_scare()
 
             elif self.state == "peek":
                 if self.peek_phase == "slide_in":
@@ -996,29 +1209,28 @@ class DesktopPet(tk.Tk):
                 self.x += int(self.vx)
 
             # Boundary enforcement
-            if self.pet_config.get("boundary_keep") and self.state != "drag_hidden":
-                if self.state != "peek" and self.state != "hide":
+            if self.pet_config.get("boundary_keep") and self.state not in ["drag_hidden", "edge_return"]:
+                if self.state not in ["peek", "hide"]:
                     self.x = max(wl, min(self.x, wr))
                 self.y = max(wt, min(self.y, wb))
 
-            # Hard off-screen guard: always recover if completely invisible
-            # (even when boundary_keep is off, or peek/hide/broom overshoot)
-            # Allow up to half the pet width/height offscreen as a generous margin
-            # Skip states that are intentionally off-screen
-            if self.state not in ["drag_hidden", "hide", "peek"]:
-                half_w = self.width // 2
-                half_h = self.height // 2
+            if self.state not in ["drag", "drag_hidden", "hide", "peek", "edge_return"]:
                 screen_wl, screen_wt, screen_wr, screen_wb = get_work_area()
-                if (self.x + self.width < screen_wl + half_w or  # too far left
-                        self.x > screen_wr + half_w or            # too far right
-                        self.y + self.height < screen_wt + half_h or  # too far up
-                        self.y > screen_wb + half_h):             # too far down
-                    # Snap back to bottom-centre
-                    self.x = int((screen_wl + screen_wr) / 2 - self.width / 2)
-                    self.y = screen_wb - self.height
+                char_w, char_h = self._sprite_metrics("idle")
+                _, _, _, sb = sprite_screen_bounds(
+                    float(self.x), float(self.y), float(self.width), float(self.height),
+                    float(char_w), float(char_h),
+                )
+                below_taskbar = sb > screen_wb + 4
+                off_left = self.x + self.width < screen_wl
+                off_right = self.x > screen_wr
+                off_top = self.y + self.height < screen_wt
+                if below_taskbar or off_left or off_right or off_top:
+                    self._clamp_on_screen()
                     self.vx = 0
                     self.vy = 0
-                    self.set_state("idle")
+                    if self.state not in ["sleeping", "shocked"]:
+                        self.set_state("idle")
 
             self.geometry(f"+{self.x}+{self.y}")
 
@@ -1071,10 +1283,24 @@ class DesktopPet(tk.Tk):
         # ─ Render ─
         self.render_pet()
 
-        self.after(16, self.update_loop)
-
     # ─── State Machine AI (3–7s tick) ────────────────────────────────
     def state_machine_loop(self):
+        try:
+            if not self.winfo_exists():
+                return
+            self._state_machine_tick()
+        except (KeyboardInterrupt, tk.TclError):
+            return
+        except Exception:
+            pass
+
+        try:
+            if self.winfo_exists():
+                self.after(random.randint(3000, 7000), self.state_machine_loop)
+        except (KeyboardInterrupt, tk.TclError):
+            pass
+
+    def _state_machine_tick(self):
         idle_dur = get_idle_duration()
         lang = self.pet_config.get("language")
         p = get_personality()
@@ -1109,7 +1335,7 @@ class DesktopPet(tk.Tk):
                 )
 
             # Normal random behavior with personality weights
-            if self.state not in ["drag", "action", "sleeping", "drag_hidden"] and not self.is_dragging:
+            if self.state not in ["drag", "action", "sleeping", "drag_hidden", "edge_return"] and not self.is_dragging:
                 roll = random.random()
 
                 if getattr(self, "is_anchored", False):
@@ -1169,8 +1395,6 @@ class DesktopPet(tk.Tk):
                         get_speech_bubble(self.state if self.state in ["idle", "cast_spell", "sleep"] else "idle", lang)
                     )
 
-        self.after(random.randint(3000, 7000), self.state_machine_loop)
-
     # ─── Rendering ────────────────────────────────────────────────────
     def render_pet(self):
         scale = self.pet_config.get("scale")
@@ -1189,7 +1413,7 @@ class DesktopPet(tk.Tk):
             img_key = "laugh"
         elif self.state == "shocked":
             img_key = "shocked"
-        elif self.state in ["peek", "hide"]:
+        elif self.state in ["peek", "hide", "edge_return"]:
             img_key = "peek"
         elif self.state == "focus":
             img_key = "focus"
@@ -1444,19 +1668,16 @@ class DesktopPet(tk.Tk):
     # ─── Mouse Head Tracking ──────────────────────────────────────────
     def _update_mouse_tracking(self):
         """Smoothly update facing direction toward the mouse cursor."""
-        try:
-            mx = self.winfo_pointerx()
-            cx = self.x + self.width // 2
-            # Only track when idle/calm (not dragging or mid-action)
-            if self.state in ["idle", "study", "tea", "focus", "blush", "laugh"] and not self.is_dragging:
-                target = (mx < cx)
-                # Smooth interpolation: only flip facing if mouse is clearly on that side
-                if mx < cx - 30:
-                    self.facing_left = True
-                elif mx > cx + 30:
-                    self.facing_left = False
-        except Exception:
-            pass
+        pos = self._safe_pointer_xy()
+        if pos is None:
+            return
+        mx, _my = pos
+        cx = self.x + self.width // 2
+        if self.state in ["idle", "study", "tea", "focus", "blush", "laugh"] and not self.is_dragging:
+            if mx < cx - 30:
+                self.facing_left = True
+            elif mx > cx + 30:
+                self.facing_left = False
 
     # ─── Open GUI Dialogs ─────────────────────────────────────────────
     def open_settings(self):

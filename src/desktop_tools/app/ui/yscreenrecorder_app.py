@@ -1711,6 +1711,53 @@ class YScreenRecorderOverlay(tk.Toplevel):
         if self._standalone_root is not None:
             cleanup_hidden_root(self._standalone_root)
 
+    def force_shutdown(self) -> None:
+        """Stop recording and close without confirmation (hub shutdown)."""
+        if self.recording_process is not None:
+            try:
+                self.recording_process.terminate()
+            except Exception:
+                pass
+            self.recording_process = None
+        if self.recording_state == "paused" or self.recording_segments:
+            self._discard_recording_session()
+        if self._poll_job is not None:
+            try:
+                self.after_cancel(self._poll_job)
+            except Exception:
+                pass
+            self._poll_job = None
+        self._stop_tray_icon()
+        self._stop_record_hotkey_listener()
+        self._restore_after_recording()
+        self._hide_recording_hud()
+        try:
+            self.destroy()
+        except Exception:
+            pass
+
+
+def force_close_yscreenrecorder_if_open() -> None:
+    """Close YScreenRecorder without prompting (hub shutdown)."""
+    global yscreenrecorder_window
+    window = yscreenrecorder_window
+    if window is None:
+        return
+    try:
+        if not window.winfo_exists():
+            yscreenrecorder_window = None
+            return
+        standalone = getattr(window, "_standalone_root", None)
+        if hasattr(window, "force_shutdown"):
+            window.force_shutdown()
+        else:
+            window.destroy()
+        if standalone is not None:
+            cleanup_hidden_root(standalone)
+    except Exception:
+        pass
+    yscreenrecorder_window = None
+
 
 def open_yscreenrecorder(parent=None):
     """Open YScreenRecorder as an overlay singleton."""

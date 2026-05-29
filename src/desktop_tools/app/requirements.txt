@@ -7,7 +7,8 @@ pywin32>=306; platform_system=="Windows"  # Windows-only APIs
 validators>=0.22.0      # URL validation
 requests>=2.31.0        # HTTP requests
 certifi>=2023.7.22      # SSL certificates
-customtkinter>=5.2.0    # Background remover UI
+customtkinter>=5.2.0    # Background remover UI + Anika settings GUI
+keyboard>=0.13.5; platform_system=="Windows"  # Anika global hotkey (optional fallback)
 rembg>=2.0.0            # Background removal engine
 onnxruntime>=1.15.0     # rembg inference backend
 pyinstaller>=6.0.0      # Linux AppImage build flow

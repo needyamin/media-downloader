@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-ANIKA_USER_DIR = Path.home() / ".yamos_witch_mate"
+from desktop_tools.shared.user_data_paths import get_anika_user_dir
+
+ANIKA_USER_DIR = get_anika_user_dir()
 ANIKA_CONFIG_FILE = ANIKA_USER_DIR / "config.json"
 
 DEFAULT_BREAK_INTERVAL_MINS = 30

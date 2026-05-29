@@ -32,15 +32,24 @@ def verify_assets():
         sys.exit(1)
 
 def main():
-    # Make sure resources folder and processed PNGs exist
     verify_assets()
-    
-    # Initialize and run Desktop Pet app
-    print("Launching Anika, your Bangladeshi Witch companion...")
+
+    debug = os.environ.get("ANIKA_DEBUG", "").strip().lower() in ("1", "true", "yes")
+    if debug:
+        print("Launching Anika, your Bangladeshi Witch companion...")
+
     app = DesktopPet()
-    
-    # Run the tkinter mainloop
-    app.mainloop()
+    try:
+        app.mainloop()
+    except KeyboardInterrupt:
+        try:
+            app.quit_app()
+        except Exception:
+            pass
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass

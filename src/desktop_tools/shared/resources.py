@@ -58,6 +58,8 @@ def get_project_root() -> Path:
     for root in candidate_roots:
         if (root / "app_flags.json").exists() or (root / "assets").exists() or (root / "needyamin.ico").exists():
             return root
+        if (root / "desktop_tools" / "anika" / "main.py").exists():
+            return root
     return candidate_roots[0]
 
 def get_app_root() -> Path:

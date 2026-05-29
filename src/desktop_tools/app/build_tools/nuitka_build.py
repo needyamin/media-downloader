@@ -12,7 +12,14 @@ import time
 
 try:
     from .build_manifest import (
+        ANIKA_DIR,
+        ANIKA_MAIN_SCRIPT,
+        ANIKA_OUTPUT_EXE_WIN,
+        ANIKA_INCLUDE_PACKAGES,
+        ANIKA_INCLUDE_PACKAGE_DATA,
+        ANIKA_OPTIONAL_MODULES,
         APP_DIR,
+        APP_FLAGS_PATH,
         EXCLUDED_IMPORTS,
         ICON_PATH,
         INNO_SCRIPT,
@@ -21,6 +28,9 @@ try:
         REQUIREMENTS_FILE,
         REQUIRED_PACKAGES,
         REQUIRED_PACKAGE_DATA,
+        anika_nuitka_data_arguments,
+        discover_anika_module_names,
+        linux_pyinstaller_data_arguments,
         nuitka_data_file_arguments,
         print_bundle_summary,
         required_include_modules,
@@ -28,7 +38,14 @@ try:
     )
 except ImportError:
     from build_manifest import (
+        ANIKA_DIR,
+        ANIKA_MAIN_SCRIPT,
+        ANIKA_OUTPUT_EXE_WIN,
+        ANIKA_INCLUDE_PACKAGES,
+        ANIKA_INCLUDE_PACKAGE_DATA,
+        ANIKA_OPTIONAL_MODULES,
         APP_DIR,
+        APP_FLAGS_PATH,
         EXCLUDED_IMPORTS,
         ICON_PATH,
         INNO_SCRIPT,
@@ -37,6 +54,9 @@ except ImportError:
         REQUIREMENTS_FILE,
         REQUIRED_PACKAGES,
         REQUIRED_PACKAGE_DATA,
+        anika_nuitka_data_arguments,
+        discover_anika_module_names,
+        linux_pyinstaller_data_arguments,
         nuitka_data_file_arguments,
         print_bundle_summary,
         required_include_modules,
@@ -60,7 +80,21 @@ STANDALONE_DIST_DIR = WINDOWS_BUILD_OUTPUT_DIR / f"{MAIN_SCRIPT.stem}.dist"
 
 
 def read_current_version() -> str:
-    """Read the app version directly from the main application file."""
+    """Read the release version from CI env, app_flags.json, or the main app module."""
+    env_version = os.environ.get("MD_RELEASE_VERSION", "").strip().lstrip("v")
+    if env_version:
+        return env_version
+
+    try:
+        import json
+
+        flags = json.loads(APP_FLAGS_PATH.read_text(encoding="utf-8"))
+        version = flags.get("versions", {}).get("media_downloader")
+        if version:
+            return str(version)
+    except Exception:
+        pass
+
     try:
         contents = MAIN_SCRIPT.read_text(encoding="utf-8")
         match = re.search(r"CURRENT_VERSION\s*=\s*['\"]([^'\"]+)['\"]", contents)
@@ -139,6 +173,7 @@ def ensure_build_dependencies() -> None:
     ensure_python_package("tqdm", "tqdm")
     ensure_python_package("jsonschema", "jsonschema")
     ensure_python_package("jsonschema_specifications", "jsonschema-specifications")
+    ensure_python_package("keyboard", "keyboard")
 
     if REQUIREMENTS_FILE.exists():
         print(f"Ensuring application requirements from {REQUIREMENTS_FILE}...")
@@ -303,11 +338,10 @@ def build_pyinstaller_fallback() -> None:
         f"--workpath={pyinstaller_work_dir}",
         f"--specpath={pyinstaller_work_dir}",
         f"--paths={REPO_ROOT / 'src'}",
-        f"--add-data={APP_DIR / 'assets'}{os.pathsep}assets",
-        f"--add-data={REPO_ROOT / 'app_flags.json'}{os.pathsep}.",
-        f"--add-data={ICON_PATH}{os.pathsep}.",
         str(MAIN_SCRIPT),
     ]
+    pyinstaller_args.extend(linux_pyinstaller_data_arguments(os.pathsep))
+    pyinstaller_args.append(f"--add-data={ICON_PATH}{os.pathsep}.")
 
     for module_name in required_include_modules():
         pyinstaller_args.append(f"--hidden-import={module_name}")
@@ -347,6 +381,84 @@ def build_pyinstaller_fallback() -> None:
         print(f"PyInstaller fallback completed but expected executable is missing: {expected}")
         raise SystemExit(1)
     print(f"PyInstaller fallback produced executable: {expected}")
+
+
+def _find_newest_exe(search_dir: Path, preferred_names: tuple[str, ...]) -> Path | None:
+    """Locate a freshly built executable under a Nuitka output directory."""
+    if not search_dir.exists():
+        return None
+    for name in preferred_names:
+        candidate = search_dir / name
+        if candidate.is_file():
+            return candidate
+    matches = sorted(search_dir.rglob("*.exe"), key=lambda path: path.stat().st_mtime, reverse=True)
+    return matches[0] if matches else None
+
+
+def build_anika_companion() -> None:
+    """Build a standalone Anika.exe companion placed beside the main hub binary."""
+    if not ANIKA_MAIN_SCRIPT.is_file():
+        print("Anika entry script missing; skipping companion build.")
+        return
+
+    print("Building Anika companion executable with Nuitka...")
+    anika_output_dir = BUILD_DIR / "anika"
+    anika_output_dir.mkdir(parents=True, exist_ok=True)
+
+    env = os.environ.copy()
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(ANIKA_DIR) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+
+    anika_args = [
+        sys.executable,
+        "-m",
+        "nuitka",
+        "--assume-yes-for-downloads",
+        "--windows-console-mode=disable",
+        "--plugin-enable=tk-inter",
+        f"--output-dir={anika_output_dir}",
+        f"--output-filename={ANIKA_OUTPUT_EXE_WIN}",
+        "--standalone",
+        "--onefile",
+        f"--jobs={CPU_JOBS}",
+        "--lto=no",
+        str(ANIKA_MAIN_SCRIPT),
+    ]
+    anika_args.extend(select_compiler_arguments())
+    anika_args.extend(anika_nuitka_data_arguments())
+    for package_name in ANIKA_INCLUDE_PACKAGES:
+        anika_args.append(f"--include-package={package_name}")
+    for package_name in ANIKA_INCLUDE_PACKAGE_DATA:
+        anika_args.append(f"--include-package-data={package_name}")
+    for module_name in discover_anika_module_names():
+        anika_args.append(f"--include-module={module_name}")
+    for module_name in ANIKA_OPTIONAL_MODULES:
+        anika_args.append(f"--include-module={module_name}")
+
+    try:
+        subprocess.run(anika_args, check=True, cwd=str(ANIKA_DIR), env=env)
+    except subprocess.CalledProcessError as exc:
+        print(f"Anika companion build failed with error code {exc.returncode}")
+        print("The hub installer will still ship Anika source assets, but Tools -> Anika may not work until Anika.exe is built.")
+        return
+
+    built_exe = _find_newest_exe(
+        anika_output_dir,
+        (ANIKA_OUTPUT_EXE_WIN, "main.exe", "Anika.exe"),
+    )
+    if built_exe is None:
+        built_exe = _find_newest_exe(anika_output_dir / "main.dist", (ANIKA_OUTPUT_EXE_WIN, "main.exe"))
+    if built_exe is None:
+        print(f"Anika build finished but no executable was found under {anika_output_dir}")
+        return
+
+    if not STANDALONE_DIST_DIR.exists():
+        print(f"Main bundle directory missing; cannot copy Anika companion: {STANDALONE_DIST_DIR}")
+        return
+
+    destination = STANDALONE_DIST_DIR / ANIKA_OUTPUT_EXE_WIN
+    shutil.copy2(built_exe, destination)
+    print(f"Anika companion copied to: {destination}")
 
 
 def build_executable() -> None:
@@ -425,6 +537,7 @@ def build_inno_installer() -> None:
                 compiler,
                 f"/DMyAppSourceDir={source_dir}",
                 f"/DMyAppExeName={OUTPUT_EXE_NAME}",
+                f"/DMyAppVersion={VERSION}",
                 str(INNO_SCRIPT),
             ],
             check=True,
@@ -453,7 +566,14 @@ def main() -> None:
     ensure_build_dependencies()
     clean_directories()
     build_executable()
+    build_anika_companion()
     build_inno_installer()
+    try:
+        from .release_ci import write_build_info
+
+        write_build_info(VERSION, WINDOWS_RELEASE_DIR)
+    except Exception as exc:
+        print(f"Could not write build-info.json: {exc}")
     print("Build process finished.")
 
 

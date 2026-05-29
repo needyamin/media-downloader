@@ -113,11 +113,25 @@ def check_anika_main_help() -> None:
     print("OK script: anika/main.py (module API)")
 
 
+def check_background_remover() -> None:
+    from desktop_tools.tools.bg_remover_checks import main as bg_remover_main
+
+    bg_remover_main()
+
+
+def check_uninstall_cleanup() -> None:
+    from desktop_tools.tools.uninstall_cleanup_checks import main as uninstall_main
+
+    uninstall_main()
+
+
 def main() -> None:
     check_compile_all()
     check_anika_main_help()
     check_anika_settings_window()
     check_anika_subprocess_launch()
+    check_background_remover()
+    check_uninstall_cleanup()
     print("Script checks passed.")
 
 

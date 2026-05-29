@@ -299,6 +299,20 @@ class AnikaBreakSettingsWindow(tk.Toplevel):
             _settings_window = None
 
 
+def force_close_anika_settings_if_open() -> None:
+    """Close break-settings without prompting (hub shutdown)."""
+    global _settings_window
+    window = _settings_window
+    if window is None:
+        return
+    try:
+        if window.winfo_exists():
+            window.destroy()
+    except Exception:
+        pass
+    _settings_window = None
+
+
 def open_anika_settings(parent: tk.Misc | None = None):
     """Open break reminder settings as a singleton window."""
     global _settings_window

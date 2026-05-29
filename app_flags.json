@@ -36,9 +36,11 @@
     "screen_recorder": {}
   },
   "updates": {
+    "packaged_auto_update": true,
     "source_auto_pull": true,
     "source_auto_restart_after_pull": false,
     "source_remote": "origin",
-    "source_branch": "auto"
+    "source_branch": "auto",
+    "github_repo": "needyamin/media-downloader"
   }
 }

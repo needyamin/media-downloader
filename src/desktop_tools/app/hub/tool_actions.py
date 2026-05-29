@@ -87,8 +87,13 @@ def open_anika_settings(*, root, log, messagebox_module):
 
 def open_anika(*, root, log, messagebox_module):
     try:
-        launch_anika_tool(root)
-        log("Opened Anika")
+        result = launch_anika_tool(root)
+        if result == "already_running":
+            log("Anika is already running — brought her window to the front")
+        elif result == "failed":
+            log("Anika failed to start")
+        else:
+            log("Opened Anika")
     except Exception as exc:
         log(f"Error opening desktop tool (Opened Anika): {exc}")
         messagebox_module.showerror("Anika Error", f"Could not open Anika:\n{exc}")

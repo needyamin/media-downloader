@@ -11,6 +11,30 @@ APP_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = REPO_ROOT / "src"
 SHARED_DIR = SRC_DIR / "desktop_tools" / "shared"
 ANIKA_DIR = SRC_DIR / "desktop_tools" / "anika"
+ANIKA_MAIN_SCRIPT = ANIKA_DIR / "main.py"
+ANIKA_RESOURCES_DIR = ANIKA_DIR / "resources"
+ANIKA_APP_DIR = ANIKA_DIR / "app"
+ANIKA_OUTPUT_EXE_WIN = "Anika.exe"
+ANIKA_OUTPUT_EXE_LINUX = "Anika"
+ANIKA_REQUIRED_ASSETS = frozenset(
+    {
+        "idle.png",
+        "dragged.png",
+        "action.png",
+        "sleeping.png",
+    }
+)
+ANIKA_INCLUDE_PACKAGES = [
+    "PIL",
+    "customtkinter",
+]
+ANIKA_INCLUDE_PACKAGE_DATA = [
+    "customtkinter",
+    "PIL",
+]
+ANIKA_OPTIONAL_MODULES = [
+    "keyboard",
+]
 APP_PACKAGE = "desktop_tools.app"
 SHARED_PACKAGE = "desktop_tools.shared"
 
@@ -156,11 +180,32 @@ def discover_asset_files() -> list[Path]:
     return sorted(path for path in ASSETS_DIR.rglob("*") if path.is_file())
 
 
+def discover_anika_module_names() -> list[str]:
+    """Return app.* modules shipped inside the Anika companion process."""
+    if not ANIKA_APP_DIR.is_dir():
+        return []
+    modules: list[str] = []
+    for script_path in sorted(ANIKA_APP_DIR.glob("*.py")):
+        if script_path.stem == "__init__":
+            continue
+        modules.append(f"app.{script_path.stem}")
+    return modules
+
+
 def discover_anika_data_files() -> list[Path]:
     """Return Anika mascot resources and entry scripts for packaged builds."""
     if not ANIKA_DIR.is_dir():
         return []
-    return sorted(path for path in ANIKA_DIR.rglob("*") if path.is_file())
+    files: list[Path] = []
+    for path in ANIKA_DIR.rglob("*"):
+        if not path.is_file():
+            continue
+        if "__pycache__" in path.parts:
+            continue
+        if path.suffix == ".pyc":
+            continue
+        files.append(path)
+    return sorted(files)
 
 
 def discover_asset_names_from_source() -> set[str]:
@@ -215,6 +260,20 @@ def validate_source_tree() -> None:
     if not shared_modules:
         missing.append(f"no shared modules found in {SHARED_DIR}")
 
+    if not ANIKA_DIR.is_dir():
+        missing.append(f"anika directory: {ANIKA_DIR}")
+    elif not ANIKA_MAIN_SCRIPT.is_file():
+        missing.append(f"anika entry script: {ANIKA_MAIN_SCRIPT}")
+    elif not ANIKA_RESOURCES_DIR.is_dir():
+        missing.append(f"anika resources directory: {ANIKA_RESOURCES_DIR}")
+    else:
+        for asset_name in sorted(ANIKA_REQUIRED_ASSETS):
+            asset_path = ANIKA_RESOURCES_DIR / asset_name
+            if not asset_path.is_file():
+                missing.append(f"anika required asset: resources/{asset_name}")
+        if not discover_anika_module_names():
+            missing.append(f"no anika app modules found in {ANIKA_APP_DIR}")
+
     if missing:
         print("Packaging manifest validation failed:")
         for item in missing:
@@ -237,6 +296,24 @@ def print_bundle_summary() -> None:
     for asset_path in discover_asset_files():
         relative = asset_path.relative_to(ASSETS_DIR)
         print(f"    - assets/{relative.as_posix()}")
+    print("  Anika companion:")
+    print(f"    - entry: {ANIKA_MAIN_SCRIPT.relative_to(REPO_ROOT).as_posix()}")
+    print(f"    - packaged exe (Windows): {ANIKA_OUTPUT_EXE_WIN}")
+    print("  Anika modules:")
+    for module_name in discover_anika_module_names():
+        print(f"    - {module_name}")
+    print("  Anika data files:")
+    for data_path in discover_anika_data_files():
+        relative = data_path.relative_to(ANIKA_DIR)
+        print(f"    - anika/{relative.as_posix()}")
+
+
+def anika_nuitka_data_arguments() -> list[str]:
+    """Data files embedded in the standalone Anika companion binary."""
+    args: list[str] = []
+    if ANIKA_RESOURCES_DIR.is_dir():
+        args.append(f"--include-data-dir={ANIKA_RESOURCES_DIR}=resources")
+    return args
 
 
 def nuitka_data_file_arguments() -> list[str]:

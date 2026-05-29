@@ -2626,7 +2626,7 @@ def open_download_list_window(select_record_id=None):
 
     tk.Label(
         header,
-        text="Download List",
+        text="📋 Download List",
         font=('Segoe UI', 13, 'bold'),
         bg=THEME['light_gray'],
         fg=THEME['fg'],
@@ -2651,28 +2651,28 @@ def open_download_list_window(select_record_id=None):
 
     left_toolbar = tk.Frame(toolbar, bg=THEME['light_gray'])
     left_toolbar.grid(row=0, column=0, sticky="w", padx=8, pady=8)
-    make_download_list_button(left_toolbar, "Add Current URL", add_current_url_to_download_list, bg='#2563EB', active_bg='#1D4ED8', compact=True).pack(side='left', padx=(0, 6))
-    make_download_list_button(left_toolbar, "Add URL", prompt_add_url_to_download_list, bg='#1D4ED8', active_bg='#1E40AF', compact=True).pack(side='left', padx=(0, 6))
+    make_download_list_button(left_toolbar, "➕ Add Current URL", add_current_url_to_download_list, bg='#2563EB', active_bg='#1D4ED8', compact=True).pack(side='left', padx=(0, 6))
+    make_download_list_button(left_toolbar, "🔗 Add URL", prompt_add_url_to_download_list, bg='#1D4ED8', active_bg='#1E40AF', compact=True).pack(side='left', padx=(0, 6))
 
-    download_list_resume_btn = make_download_list_button(left_toolbar, "Resume", resume_selected_download_record, bg='#0891B2', active_bg='#0E7490', compact=True)
+    download_list_resume_btn = make_download_list_button(left_toolbar, "▶ Resume", resume_selected_download_record, bg='#0891B2', active_bg='#0E7490', compact=True)
     download_list_resume_btn.pack(side='left', padx=(0, 6))
-    download_list_pause_btn = make_download_list_button(left_toolbar, "Pause", pause_selected_download_record, bg='#D97706', active_bg='#B45309', compact=True)
+    download_list_pause_btn = make_download_list_button(left_toolbar, "⏸ Pause", pause_selected_download_record, bg='#D97706', active_bg='#B45309', compact=True)
     download_list_pause_btn.pack(side='left', padx=(0, 6))
-    download_list_cancel_btn = make_download_list_button(left_toolbar, "Cancel", cancel_selected_download_record, bg='#DC2626', active_bg='#B91C1C', compact=True)
+    download_list_cancel_btn = make_download_list_button(left_toolbar, "✖ Cancel", cancel_selected_download_record, bg='#DC2626', active_bg='#B91C1C', compact=True)
     download_list_cancel_btn.pack(side='left', padx=(0, 6))
-    download_list_replace_btn = make_download_list_button(left_toolbar, "Replace Link", replace_selected_download_link, bg='#7C3AED', active_bg='#6D28D9', compact=True)
+    download_list_replace_btn = make_download_list_button(left_toolbar, "🔄 Replace Link", replace_selected_download_link, bg='#7C3AED', active_bg='#6D28D9', compact=True)
     download_list_replace_btn.pack(side='left')
 
     right_toolbar = tk.Frame(toolbar, bg=THEME['light_gray'])
     right_toolbar.grid(row=0, column=1, sticky="e", padx=8, pady=8)
-    download_list_open_file_btn = make_download_list_button(right_toolbar, "Open File", open_selected_download_file, bg='#334155', active_bg='#1E293B', compact=True)
+    download_list_open_file_btn = make_download_list_button(right_toolbar, "📄 Open File", open_selected_download_file, bg='#334155', active_bg='#1E293B', compact=True)
     download_list_open_file_btn.pack(side='left', padx=(0, 6))
-    download_list_open_folder_btn = make_download_list_button(right_toolbar, "Open Folder", open_selected_download_folder, bg='#475569', active_bg='#334155', compact=True)
+    download_list_open_folder_btn = make_download_list_button(right_toolbar, "📁 Open Folder", open_selected_download_folder, bg='#475569', active_bg='#334155', compact=True)
     download_list_open_folder_btn.pack(side='left', padx=(0, 6))
-    download_list_delete_btn = make_download_list_button(right_toolbar, "Delete", delete_selected_download_record, bg='#92400E', active_bg='#78350F', compact=True)
+    download_list_delete_btn = make_download_list_button(right_toolbar, "🗑 Delete", delete_selected_download_record, bg='#92400E', active_bg='#78350F', compact=True)
     download_list_delete_btn.pack(side='left', padx=(0, 6))
-    make_download_list_button(right_toolbar, "Clear Done", clear_finished_download_records, bg='#64748B', active_bg='#475569', compact=True).pack(side='left', padx=(0, 6))
-    make_download_list_button(right_toolbar, "Refresh", refresh_download_list_window, bg='#0F766E', active_bg='#0F5F59', compact=True).pack(side='left')
+    make_download_list_button(right_toolbar, "🧹 Clear Done", clear_finished_download_records, bg='#64748B', active_bg='#475569', compact=True).pack(side='left', padx=(0, 6))
+    make_download_list_button(right_toolbar, "🔄 Refresh", refresh_download_list_window, bg='#0F766E', active_bg='#0F5F59', compact=True).pack(side='left')
 
     tree_frame = tk.Frame(actions, bg=THEME['light_gray'])
     tree_frame.grid(row=2, column=0, sticky="nsew")
@@ -2681,11 +2681,11 @@ def open_download_list_window(select_record_id=None):
 
     columns = ("status", "name", "progress", "size", "updated")
     download_list_tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="browse")
-    download_list_tree.heading("status", text="Status")
-    download_list_tree.heading("name", text="Name")
-    download_list_tree.heading("progress", text="Progress")
-    download_list_tree.heading("size", text="Size")
-    download_list_tree.heading("updated", text="Updated")
+    download_list_tree.heading("status", text="📌 Status")
+    download_list_tree.heading("name", text="📄 Name")
+    download_list_tree.heading("progress", text="📶 Progress")
+    download_list_tree.heading("size", text="💾 Size")
+    download_list_tree.heading("updated", text="🕒 Updated")
     download_list_tree.column("status", width=130, anchor="w")
     download_list_tree.column("name", width=420, anchor="w")
     download_list_tree.column("progress", width=120, anchor="center")
@@ -2937,6 +2937,13 @@ def get_source_update_settings():
         "source_branch": str(updates.get("source_branch", "auto") or "auto").strip(),
     }
 
+def is_packaged_auto_update_enabled():
+    """Whether the installed app should download GitHub release installers."""
+    updates = APP_FLAGS.get("updates", {}) if isinstance(APP_FLAGS, dict) else {}
+    if not isinstance(updates, dict):
+        return True
+    return bool(updates.get("packaged_auto_update", True))
+
 def run_git_command(args, cwd, timeout=60):
     """Run a git command and return CompletedProcess."""
     return subprocess.run(
@@ -2954,7 +2961,7 @@ def restart_source_app():
         target_script = Path(sys.argv[0]).resolve() if sys.argv else Path(__file__).resolve()
         launch_args = [sys.executable, str(target_script), *sys.argv[1:]]
         subprocess.Popen(launch_args, cwd=str(get_project_root()))
-        ui_queue.put(lambda: root.after(400, root.quit))
+        ui_queue.put(lambda: root.after(400, exit_application))
         return True
     except Exception as restart_error:
         app_update_log(f"Could not restart automatically: {restart_error}")
@@ -3061,6 +3068,19 @@ def check_updates_on_startup(user_initiated=False):
             debug_log("Update check process completed.")
             print("=== UPDATE CHECK PROCESS COMPLETED ===\n")
             return update_started
+
+        if not is_packaged_auto_update_enabled():
+            app_update_log("Packaged auto-update is disabled in app_flags.json.")
+            if user_initiated:
+                show_info_threadsafe(
+                    "Updates Disabled",
+                    "Automatic installer updates are turned off.\n\n"
+                    f"Open releases manually:\nhttps://github.com/{REPO_OWNER}/{REPO_NAME}/releases",
+                )
+            if performed_check:
+                update_check_timestamp()
+            check_ffmpeg_update()
+            return False
 
         app_update_log("Checking GitHub for a newer application release...")
         latest_release = check_for_updates()
@@ -3252,7 +3272,7 @@ def download_and_install_update(release, user_initiated=False):
         set_status_threadsafe("Installing downloaded update in background...")
 
         launch_background_update_installer(exe_path)
-        ui_queue.put(lambda: root.after(800, root.quit))
+        ui_queue.put(lambda: root.after(800, exit_application))
         return True
             
     except Exception as e:
@@ -3408,7 +3428,7 @@ file_menu.add_checkbutton(
     state='normal' if IS_WINDOWS else 'disabled'
 )
 file_menu.add_separator()
-file_menu.add_command(label="Exit", command=root.quit)
+file_menu.add_command(label="Exit", command=lambda: exit_application())
 
 # Settings Menu
 settings_menu = tk.Menu(menubar, tearoff=0)
@@ -4609,7 +4629,7 @@ def tray_show_window(icon=None, menu_item=None):
 def tray_exit_application(icon=None, menu_item=None):
     """Exit the application from the tray."""
     try:
-        root.after(0, root.quit)
+        root.after(0, exit_application)
     except Exception as e:
         log(f"Error exiting from tray: {e}")
 
@@ -4734,6 +4754,44 @@ def create_tray_icon():
     except Exception as e:
         log(f"Error creating tray icon: {e}")
 
+def close_hub_owned_windows():
+    """Close auxiliary windows owned by the main hub."""
+    close_download_list_window()
+    close_about_window()
+    try:
+        if debug_update_window is not None and debug_update_window.winfo_exists():
+            close_debug_update_window()
+    except Exception:
+        pass
+    try:
+        if error_dialog_window is not None and error_dialog_window.winfo_exists():
+            close_error_dialog()
+    except Exception:
+        pass
+
+
+def shutdown_hub_tools():
+    """Close Anika, tool windows, and hub-owned dialogs."""
+    try:
+        from desktop_tools.app.hub.tool_lifecycle import close_all_hub_tools
+
+        close_all_hub_tools()
+    except Exception as exc:
+        log(f"Error closing hub tools: {exc}")
+    try:
+        close_hub_owned_windows()
+    except Exception as exc:
+        log(f"Error closing hub windows: {exc}")
+
+
+def exit_application():
+    """Fully exit the app after closing child tools."""
+    shutdown_hub_tools()
+    try:
+        root.quit()
+    except Exception as exc:
+        log(f"Error exiting application: {exc}")
+
 def show_window():
     """Show the main window."""
     root.deiconify()
@@ -4741,7 +4799,8 @@ def show_window():
     root.focus_force()
 
 def hide_window():
-    """Hide the window to system tray."""
+    """Hide the window to system tray and close child tools."""
+    shutdown_hub_tools()
     root.withdraw()
     if tray_icon is None:
         create_tray_icon()
@@ -5455,7 +5514,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         sys.exit(0)
     finally:
-        # Clean up tray icon when exiting
+        shutdown_hub_tools()
         stop_screenshot_hotkey_listener()
         if tray_icon is not None:
             tray_icon.stop()

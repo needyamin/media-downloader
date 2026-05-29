@@ -62,6 +62,9 @@ def print_linux_runtime_guidance() -> None:
     print("  - YScreenshot may use grim, gnome-screenshot, scrot, or ImageMagick 'import' as screenshot fallbacks.")
     print("  - Clipboard image copy on Linux prefers wl-clipboard on Wayland or xclip on X11.")
     print("Recommended distro packages: ffmpeg xclip wl-clipboard grim gnome-screenshot scrot imagemagick python3-tk")
+    print("Anika mascot note:")
+    print("  - Anika assets are bundled under desktop_tools/anika for parity with Windows builds.")
+    print("  - The live desktop pet is Windows-only (Win32 APIs); Linux AppImage ships assets and hub settings UI.")
 
 
 def get_build_python_executable() -> str:
@@ -170,6 +173,7 @@ def ensure_build_dependencies() -> None:
     ensure_python_package("pooch", "pooch")
     ensure_python_package("tqdm", "tqdm")
     ensure_python_package("jsonschema", "jsonschema")
+    ensure_python_package("keyboard", "keyboard")
 
     if REQUIREMENTS_FILE.exists():
         print(f"Ensuring application requirements from {REQUIREMENTS_FILE}...")
@@ -334,7 +338,7 @@ def create_appdir(bundle_dir: Path, icon_png: Path) -> Path:
                 f"  <launchable type=\"desktop-id\">{APP_DESKTOP_ID}.desktop</launchable>",
                 "  <url type=\"homepage\">https://github.com/needyamin/media-downloader</url>",
                 "  <description>",
-                "    <p>Media Downloader bundles video and audio downloads with built-in converter, background remover, screenshot, and screen recorder tools.</p>",
+                "    <p>Media Downloader bundles video and audio downloads with built-in converter, background remover, screenshot, screen recorder, and Anika mascot assets (Windows desktop pet).</p>",
                 "  </description>",
                 "  <categories>",
                 "    <category>AudioVideo</category>",
@@ -413,6 +417,15 @@ def main() -> None:
     appimagetool_path = ensure_appimagetool()
     output_path = build_appimage(appdir, appimagetool_path)
     print(f"Linux AppImage created: {output_path}")
+    try:
+        from .release_ci import read_current_version_from_flags, write_build_info
+    except ImportError:
+        from release_ci import read_current_version_from_flags, write_build_info
+
+    try:
+        write_build_info(read_current_version_from_flags(), LINUX_RELEASE_DIR)
+    except Exception as exc:
+        print(f"Could not write build-info.json: {exc}")
     print_linux_runtime_guidance()
 
 

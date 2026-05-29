@@ -1102,6 +1102,25 @@ def open_screenshot_studio(parent=None):
     return screenshot_window
 
 
+def force_close_screenshot_if_open() -> None:
+    """Close YScreenshot without prompting (hub shutdown)."""
+    global screenshot_window
+    window = screenshot_window
+    if window is None:
+        return
+    try:
+        if not window.winfo_exists():
+            screenshot_window = None
+            return
+        standalone = getattr(window, "_standalone_root", None)
+        window.destroy()
+        if standalone is not None:
+            cleanup_hidden_root(standalone)
+    except Exception:
+        pass
+    screenshot_window = None
+
+
 if __name__ == "__main__":
     app = open_screenshot_studio()
     app.mainloop()

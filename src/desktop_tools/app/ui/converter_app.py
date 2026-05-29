@@ -1007,6 +1007,30 @@ class ConverterApp(tk.Toplevel):
             cleanup_hidden_root(self._standalone_root)
 
 
+def force_close_converter_if_open() -> None:
+    """Close the converter without confirmation (hub shutdown)."""
+    global converter_window
+    window = converter_window
+    if window is None:
+        return
+    try:
+        if not window.winfo_exists():
+            converter_window = None
+            return
+        if getattr(window, "is_converting", False):
+            try:
+                window.stop_queue()
+            except Exception:
+                pass
+        standalone = getattr(window, "_standalone_root", None)
+        window.destroy()
+        if standalone is not None:
+            cleanup_hidden_root(standalone)
+    except Exception:
+        pass
+    converter_window = None
+
+
 def open_converter_window(parent=None, default_output_dir=None):
     """Open the converter as a centered child window."""
     global converter_window
