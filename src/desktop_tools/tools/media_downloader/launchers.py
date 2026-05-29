@@ -6,6 +6,8 @@ from desktop_tools.app.ui.entrypoints import (
     open_background_remover as _open_background_remover,
     open_converter_window as _open_converter_window,
     open_screenshot_studio as _open_screenshot_studio,
+    open_anika as _open_anika,
+    open_anika_settings as _open_anika_settings,
     open_yscreenrecorder as _open_yscreenrecorder,
 )
 
@@ -28,4 +30,14 @@ def open_screenshot_studio(parent=None):
 def open_yscreenrecorder(parent=None):
     """Open the recorder tool window."""
     return _open_yscreenrecorder(parent)
+
+
+def open_anika(parent=None):
+    """Open the Anika desktop mascot."""
+    return _open_anika(parent)
+
+
+def open_anika_settings(parent=None):
+    """Open Anika break reminder settings."""
+    return _open_anika_settings(parent)
 

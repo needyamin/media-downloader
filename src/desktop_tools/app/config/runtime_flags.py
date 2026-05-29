@@ -25,6 +25,7 @@ DEFAULT_APP_FLAGS = {
         "background_remover": "Ctrl+Shift+B",
         "screenshot": "Ctrl+Shift+Y",
         "screen_recorder": "Ctrl+Shift+R",
+        "anika": "Ctrl+Shift+U",
         "record_pause": "Ctrl+Shift+P",
         "record_finish": "Ctrl+Shift+S",
     },
@@ -176,6 +177,11 @@ HOTKEY_CONVERTER = get_hotkey_combo(APP_FLAGS, "converter", "Ctrl+Shift+V")
 HOTKEY_BACKGROUND_REMOVER = get_hotkey_combo(APP_FLAGS, "background_remover", "Ctrl+Shift+B")
 HOTKEY_SCREENSHOT = get_hotkey_combo(APP_FLAGS, "screenshot", "Ctrl+Shift+Y")
 HOTKEY_SCREENRECORDER = get_hotkey_combo(APP_FLAGS, "screen_recorder", "Ctrl+Shift+R")
+HOTKEY_ANIKA = get_hotkey_combo(
+    APP_FLAGS,
+    "anika",
+    get_hotkey_combo(APP_FLAGS, "yfun", "Ctrl+Shift+U"),
+)
 HOTKEY_RECORD_PAUSE = get_hotkey_combo(APP_FLAGS, "record_pause", "Ctrl+Shift+P")
 HOTKEY_RECORD_FINISH = get_hotkey_combo(APP_FLAGS, "record_finish", "Ctrl+Shift+S")
 APP_VERSION_MAIN = get_version_setting("media_downloader", "2.0.0")

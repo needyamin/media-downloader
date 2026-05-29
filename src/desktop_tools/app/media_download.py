@@ -60,6 +60,10 @@ try:
         SCREENRECORDER_HOTKEY_MODIFIERS,
         SCREENRECORDER_HOTKEY_VK,
         SCREENRECORDER_HOTKEY_LABEL,
+        ANIKA_HOTKEY_ID,
+        ANIKA_HOTKEY_MODIFIERS,
+        ANIKA_HOTKEY_VK,
+        ANIKA_HOTKEY_LABEL,
         SCREENSHOT_HOTKEY_ID,
         SCREENSHOT_HOTKEY_MODIFIERS,
         SCREENSHOT_HOTKEY_VK,
@@ -118,6 +122,10 @@ except Exception:
     SCREENRECORDER_HOTKEY_MODIFIERS = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
     SCREENRECORDER_HOTKEY_VK = ord("R")
     SCREENRECORDER_HOTKEY_LABEL = "Ctrl+Shift+R"
+    ANIKA_HOTKEY_ID = 0x5955
+    ANIKA_HOTKEY_MODIFIERS = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
+    ANIKA_HOTKEY_VK = ord("U")
+    ANIKA_HOTKEY_LABEL = "Ctrl+Shift+U"
 
     def apply_window_icon(window, app_id="needyamin.media_downloader"):
         return APP_DIR / "assets" / "needyamin.ico"
@@ -274,6 +282,14 @@ except Exception:
 
         @staticmethod
         def open_yscreenrecorder(*, root, log, messagebox_module):
+            raise RuntimeError("Desktop tool launchers are unavailable.")
+
+        @staticmethod
+        def open_anika(*, root, log, messagebox_module):
+            raise RuntimeError("Desktop tool launchers are unavailable.")
+
+        @staticmethod
+        def open_anika_settings(*, root, log, messagebox_module):
             raise RuntimeError("Desktop tool launchers are unavailable.")
 
     hub_tool_actions = _HubToolActionsFallback()
@@ -770,7 +786,15 @@ def show_error_dialog(title, summary, details="", suggestion=""):
     outer = tk.Frame(error_dialog_window, bg=THEME['bg'])
     outer.pack(fill='both', expand=True, padx=20, pady=20)
 
-    header_card = tk.Frame(outer, bg='#fff3f3', bd=1, relief='solid')
+    header_card = tk.Frame(
+        outer,
+        bg='#fff3f3',
+        bd=0,
+        relief='flat',
+        highlightthickness=1,
+        highlightbackground=THEME['border'],
+        highlightcolor=THEME['border'],
+    )
     header_card.pack(fill='x', pady=(0, 14))
 
     icon_box = tk.Label(
@@ -807,7 +831,15 @@ def show_error_dialog(title, summary, details="", suggestion=""):
         wraplength=470,
     ).pack(anchor='w', pady=(6, 0))
 
-    body_card = tk.Frame(outer, bg='white', bd=1, relief='solid')
+    body_card = tk.Frame(
+        outer,
+        bg='white',
+        bd=0,
+        relief='flat',
+        highlightthickness=1,
+        highlightbackground=THEME['border'],
+        highlightcolor=THEME['border'],
+    )
     body_card.pack(fill='both', expand=True)
     body_card.grid_rowconfigure(1, weight=1)
     body_card.grid_columnconfigure(0, weight=1)
@@ -964,7 +996,15 @@ def show_url_validation_dialog(current_text=""):
     outer = tk.Frame(error_dialog_window, bg=THEME['bg'])
     outer.pack(fill='both', expand=True, padx=20, pady=20)
 
-    header_card = tk.Frame(outer, bg='#EEF6FF', bd=1, relief='solid')
+    header_card = tk.Frame(
+        outer,
+        bg='#EEF6FF',
+        bd=0,
+        relief='flat',
+        highlightthickness=1,
+        highlightbackground=THEME['border'],
+        highlightcolor=THEME['border'],
+    )
     header_card.pack(fill='x', pady=(0, 14))
 
     icon_box = tk.Label(
@@ -1001,7 +1041,15 @@ def show_url_validation_dialog(current_text=""):
         wraplength=440,
     ).pack(anchor='w', pady=(6, 0))
 
-    body_card = tk.Frame(outer, bg='white', bd=1, relief='solid')
+    body_card = tk.Frame(
+        outer,
+        bg='white',
+        bd=0,
+        relief='flat',
+        highlightthickness=1,
+        highlightbackground=THEME['border'],
+        highlightcolor=THEME['border'],
+    )
     body_card.pack(fill='both', expand=True)
 
     tk.Label(
@@ -1023,7 +1071,15 @@ def show_url_validation_dialog(current_text=""):
         wraplength=560,
     ).pack(anchor='w', padx=18)
 
-    detail_card = tk.Frame(body_card, bg=THEME['light_gray'], bd=1, relief='solid')
+    detail_card = tk.Frame(
+        body_card,
+        bg=THEME['light_gray'],
+        bd=0,
+        relief='flat',
+        highlightthickness=1,
+        highlightbackground=THEME['border'],
+        highlightcolor=THEME['border'],
+    )
     detail_card.pack(fill='x', padx=18, pady=14)
 
     tk.Label(
@@ -1110,7 +1166,7 @@ def show_debug_update_window(debug_data, report_text):
         debug_update_window.destroy()
 
     debug_update_window = tk.Toplevel(root)
-    debug_update_window.title("Debug Update System")
+    debug_update_window.title("Update System")
     debug_update_window.geometry("760x560")
     debug_update_window.minsize(700, 500)
     debug_update_window.configure(bg=THEME['bg'])
@@ -1126,7 +1182,7 @@ def show_debug_update_window(debug_data, report_text):
 
     tk.Label(
         header,
-        text="Debug Update System",
+        text="Update System",
         font=('Segoe UI', 20, 'bold'),
         bg=THEME['bg'],
         fg=THEME['primary']
@@ -1140,7 +1196,15 @@ def show_debug_update_window(debug_data, report_text):
         fg=THEME['gray']
     ).pack(anchor='w', pady=(4, 0))
 
-    summary_card = tk.Frame(outer, bg=THEME['light_gray'], bd=1, relief='solid')
+    summary_card = tk.Frame(
+        outer,
+        bg=THEME['light_gray'],
+        bd=0,
+        relief='flat',
+        highlightthickness=1,
+        highlightbackground=THEME['border'],
+        highlightcolor=THEME['border'],
+    )
     summary_card.pack(fill='x', pady=(0, 14))
     summary_card.grid_columnconfigure(1, weight=1)
     summary_card.grid_columnconfigure(3, weight=1)
@@ -1192,7 +1256,15 @@ def show_debug_update_window(debug_data, report_text):
         release_link.pack(fill='x', pady=(0, 10))
         release_link.bind('<Button-1>', lambda _event: webbrowser.open(debug_data['release_url']))
 
-    report_card = tk.Frame(outer, bg='white', bd=1, relief='solid')
+    report_card = tk.Frame(
+        outer,
+        bg='white',
+        bd=0,
+        relief='flat',
+        highlightthickness=1,
+        highlightbackground=THEME['border'],
+        highlightcolor=THEME['border'],
+    )
     report_card.pack(fill='both', expand=True)
     report_card.grid_rowconfigure(1, weight=1)
     report_card.grid_columnconfigure(0, weight=1)
@@ -1209,7 +1281,7 @@ def show_debug_update_window(debug_data, report_text):
         report_card,
         wrap='word',
         font=('Consolas', 10),
-        bg='white',
+        bg=THEME['light_gray'],
         fg=THEME['fg'],
         relief='flat',
         padx=12,
@@ -1522,6 +1594,21 @@ def update_download_path_display():
     if 'download_path_var' in globals():
         download_path_var.set(str(downloads_path))
 
+def check_internet_connection():
+    """Return True when internet appears reachable."""
+    test_urls = (
+        "https://clients3.google.com/generate_204",
+        "https://www.cloudflare.com/cdn-cgi/trace",
+    )
+    for test_url in test_urls:
+        try:
+            response = requests.get(test_url, timeout=3)
+            if response.status_code < 500:
+                return True
+        except Exception:
+            continue
+    return False
+
 def apply_download_root(selected_root, persist=True):
     """Apply a new root download folder and refresh dependent state."""
     refresh_output_directories(selected_root)
@@ -1830,6 +1917,16 @@ def open_yscreenrecorder():
 def trigger_yscreenrecorder(event=None):
     """Open YScreenRecorder from the GUI or keyboard shortcut."""
     open_yscreenrecorder()
+    if event is not None:
+        return "break"
+
+def open_anika():
+    """Open Anika character and settings from the downloader menu bar."""
+    hub_tool_actions.open_anika(root=root, log=log, messagebox_module=messagebox)
+
+def trigger_anika(event=None):
+    """Open Anika from the GUI or keyboard shortcut."""
+    open_anika()
     if event is not None:
         return "break"
 
@@ -3351,6 +3448,8 @@ tools_menu.add_command(label="Video Converter", accelerator=CONVERTER_HOTKEY_LAB
 tools_menu.add_command(label="BG Remover", accelerator=BG_REMOVER_HOTKEY_LABEL, command=open_background_remover)
 tools_menu.add_command(label="YScreenshot", accelerator=SCREENSHOT_HOTKEY_LABEL, command=open_screenshot_studio)
 tools_menu.add_command(label="YScreenRecorder", accelerator=SCREENRECORDER_HOTKEY_LABEL, command=open_yscreenrecorder)
+tools_menu.add_separator()
+tools_menu.add_command(label="Anika", accelerator=ANIKA_HOTKEY_LABEL, command=open_anika)
 
 # Help Menu
 help_menu = tk.Menu(menubar, tearoff=0)
@@ -3363,7 +3462,7 @@ help_menu.add_command(label="Report Issue",
 
 # Add debug command to Help menu
 help_menu.add_separator()
-help_menu.add_command(label="Debug Update System", command=debug_update_check)
+help_menu.add_command(label="Update System", command=debug_update_check)
 
 # Add function to force update check
 def force_check_updates():
@@ -3495,6 +3594,22 @@ def process_early_logs():
         except queue.Empty:
             break
 
+def clear_activity_log():
+    """Clear all entries from the activity log box."""
+    global last_visible_log_message
+    if 'output_box' not in globals():
+        return
+    try:
+        output_box.config(state='normal')
+        output_box.delete('1.0', tk.END)
+        output_box.config(state='disabled')
+        last_visible_log_message = None
+        if 'status_label' in globals():
+            status_label.config(text="Activity log cleared")
+    except Exception as exc:
+        if DEBUG_MODE:
+            print(f"[Yamin Downloader] Failed to clear activity log: {exc}")
+
 # Set window icon
 try:
     ICON_PATH = apply_window_icon(root, app_id="needyamin.media_downloader")
@@ -3546,6 +3661,36 @@ version_label = tk.Label(
     fg=THEME['gray']
 )
 version_label.pack(side='left', padx=(10, 0), pady=(10, 0))
+
+internet_status_var = tk.StringVar(value="Network: checking...")
+internet_status_label = tk.Label(
+    header_frame,
+    textvariable=internet_status_var,
+    font=('Segoe UI', 10, 'bold'),
+    bg=THEME['bg'],
+    fg=THEME['gray'],
+)
+internet_status_label.pack(side='right', padx=(10, 0), pady=(10, 0))
+
+def _apply_internet_status(connected):
+    if connected:
+        internet_status_var.set("Network: online")
+        internet_status_label.config(fg='#16A34A')
+    else:
+        internet_status_var.set("Network: offline")
+        internet_status_label.config(fg=THEME['error'])
+
+def schedule_internet_status_check():
+    """Check internet in background and refresh header status."""
+    internet_status_var.set("Network: checking...")
+    internet_status_label.config(fg=THEME['gray'])
+    def _worker():
+        connected = check_internet_connection()
+        root.after(0, lambda: _apply_internet_status(connected))
+    threading.Thread(target=_worker, daemon=True).start()
+    root.after(12000, schedule_internet_status_check)
+
+schedule_internet_status_check()
 
 # Main Content Frame
 main_frame = tk.Frame(main_container, bg=THEME['bg'])
@@ -3619,6 +3764,8 @@ url_preview_job = None
 url_preview_request_id = 0
 url_preview_image = None
 url_preview_visible = False
+url_preview_spinner_job = None
+url_preview_spinner_index = 0
 
 url_preview_frame.grid_remove()
 
@@ -3682,6 +3829,43 @@ def _format_duration_text(seconds):
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{minutes:02d}:{secs:02d}"
 
+def _is_previewable_url(url):
+    """Return True when URL looks like a valid web URL for preview."""
+    try:
+        parsed = urlparse(str(url).strip())
+        return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    except Exception:
+        return False
+
+def _stop_url_preview_spinner():
+    global url_preview_spinner_job
+    if url_preview_spinner_job is not None:
+        try:
+            root.after_cancel(url_preview_spinner_job)
+        except Exception:
+            pass
+        url_preview_spinner_job = None
+    try:
+        if url_preview_text_var.get().startswith("Loading preview..."):
+            url_preview_text_var.set("Loading preview...")
+    except Exception:
+        pass
+
+def _start_url_preview_spinner():
+    global url_preview_spinner_job, url_preview_spinner_index
+    _stop_url_preview_spinner()
+    url_preview_spinner_index = 0
+
+    def _tick():
+        global url_preview_spinner_job, url_preview_spinner_index
+        frames = ["◐", "◓", "◑", "◒"]
+        marker = frames[url_preview_spinner_index % len(frames)]
+        url_preview_spinner_index += 1
+        url_preview_text_var.set(f"Loading preview... {marker}")
+        url_preview_spinner_job = root.after(60, _tick)
+
+    _tick()
+
 def _apply_url_preview_result(request_id, url_snapshot, title, uploader, duration_text, source_label, thumb_pil_image):
     global url_preview_image, url_preview_visible
     current_url = ""
@@ -3691,6 +3875,7 @@ def _apply_url_preview_result(request_id, url_snapshot, title, uploader, duratio
         current_url = ""
     if request_id != url_preview_request_id and current_url != (url_snapshot or "").strip():
         return
+    _stop_url_preview_spinner()
 
     if not url_preview_visible:
         url_preview_frame.grid()
@@ -3727,6 +3912,7 @@ def _clear_url_preview(request_id, url_snapshot):
         current_url = ""
     if request_id != url_preview_request_id and current_url != (url_snapshot or "").strip():
         return
+    _stop_url_preview_spinner()
     if not url_preview_visible:
         url_preview_frame.grid()
         url_preview_visible = True
@@ -3792,16 +3978,39 @@ def _fetch_url_preview_worker(url, request_id):
             root.after(0, lambda rid=request_id, u=url: _clear_url_preview(rid, u))
             return
 
-    if isinstance(info, dict) and info.get('_type') == 'playlist' and info.get('entries'):
+    playlist_info = None
+    if isinstance(info, dict) and info.get('_type') == 'playlist':
+        playlist_info = info
         first_entry = next((entry for entry in info.get('entries', []) if isinstance(entry, dict)), None)
         if first_entry:
             info = first_entry
+        else:
+            info = playlist_info
 
     title = str(info.get('title') or "Unknown title")
     uploader = str(info.get('uploader') or info.get('channel') or "")
     duration_text = _format_duration_text(info.get('duration'))
     source_label = str(info.get('extractor_key') or info.get('extractor') or "")
     thumbnail_url = info.get('thumbnail')
+
+    if playlist_info is not None:
+        playlist_title = str(playlist_info.get('title') or "").strip()
+        if playlist_title:
+            title = playlist_title
+        playlist_uploader = str(
+            playlist_info.get('uploader')
+            or playlist_info.get('channel')
+            or playlist_info.get('creator')
+            or ""
+        ).strip()
+        if playlist_uploader:
+            uploader = playlist_uploader
+        source_label = "Playlist"
+        thumbnail_url = (
+            playlist_info.get('thumbnail')
+            or thumbnail_url
+            or (info.get('thumbnail') if isinstance(info, dict) else None)
+        )
 
     thumb_pil_image = None
     if thumbnail_url:
@@ -3840,6 +4049,7 @@ def schedule_url_preview_refresh():
             if url_preview_visible:
                 url_preview_frame.grid_remove()
                 url_preview_visible = False
+            _stop_url_preview_spinner()
             url_preview_text_var.set("Paste or type a supported URL to preview thumbnail and metadata.")
             url_preview_thumb_label.configure(image="", text="")
             url_preview_image = None
@@ -3847,7 +4057,8 @@ def schedule_url_preview_refresh():
         if not url_preview_visible:
             url_preview_frame.grid()
             url_preview_visible = True
-        if not validators.url(url):
+        if not _is_previewable_url(url):
+            _stop_url_preview_spinner()
             url_preview_text_var.set("Enter a valid URL to preview metadata.")
             url_preview_thumb_label.configure(image="", text="")
             url_preview_image = None
@@ -3855,6 +4066,7 @@ def schedule_url_preview_refresh():
         url_preview_text_var.set("Loading preview...")
         url_preview_thumb_label.configure(image="", text="")
         url_preview_image = None
+        _start_url_preview_spinner()
         url_preview_request_id += 1
         request_id = url_preview_request_id
         threading.Thread(target=_fetch_url_preview_worker, args=(url, request_id), daemon=True).start()
@@ -3969,11 +4181,12 @@ converter_hotkey_registered = False
 background_remover_hotkey_registered = False
 screenshot_hotkey_registered = False
 screenrecorder_hotkey_registered = False
+anika_hotkey_registered = False
 
 def _run_screenshot_hotkey_listener():
     """Listen for the global desktop tool hotkeys while the app is in the background."""
     global screenshot_hotkey_thread_id, converter_hotkey_registered, background_remover_hotkey_registered
-    global screenshot_hotkey_registered, screenrecorder_hotkey_registered
+    global screenshot_hotkey_registered, screenrecorder_hotkey_registered, anika_hotkey_registered
 
     if not IS_WINDOWS:
         return
@@ -4000,13 +4213,18 @@ def _run_screenshot_hotkey_listener():
         if not recorder_registered:
             log(f"Global screen recorder hotkey unavailable: {SCREENRECORDER_HOTKEY_LABEL}")
 
-        if not converter_registered and not background_remover_registered and not screenshot_registered and not recorder_registered:
+        anika_registered = bool(user32.RegisterHotKey(None, ANIKA_HOTKEY_ID, ANIKA_HOTKEY_MODIFIERS, ANIKA_HOTKEY_VK))
+        if not anika_registered:
+            log(f"Global Anika hotkey unavailable: {ANIKA_HOTKEY_LABEL}")
+
+        if not converter_registered and not background_remover_registered and not screenshot_registered and not recorder_registered and not anika_registered:
             return
 
         converter_hotkey_registered = converter_registered
         background_remover_hotkey_registered = background_remover_registered
         screenshot_hotkey_registered = screenshot_registered
         screenrecorder_hotkey_registered = recorder_registered
+        anika_hotkey_registered = anika_registered
         if converter_registered:
             log(f"Global converter hotkey ready: {CONVERTER_HOTKEY_LABEL}")
         if background_remover_registered:
@@ -4015,6 +4233,8 @@ def _run_screenshot_hotkey_listener():
             log(f"Global screenshot hotkey ready: {SCREENSHOT_HOTKEY_LABEL}")
         if recorder_registered:
             log(f"Global screen recorder hotkey ready: {SCREENRECORDER_HOTKEY_LABEL}")
+        if anika_registered:
+            log(f"Global Anika hotkey ready: {ANIKA_HOTKEY_LABEL}")
 
         while True:
             result = user32.GetMessageW(ctypes.byref(message), None, 0, 0)
@@ -4032,6 +4252,8 @@ def _run_screenshot_hotkey_listener():
                         root.after(0, trigger_screenshot_studio)
                     elif hotkey_id == SCREENRECORDER_HOTKEY_ID:
                         root.after(0, trigger_yscreenrecorder)
+                    elif hotkey_id == ANIKA_HOTKEY_ID:
+                        root.after(0, trigger_anika)
                 except Exception as exc:
                     log(f"Error opening desktop tool from hotkey: {exc}")
     finally:
@@ -4055,10 +4277,16 @@ def _run_screenshot_hotkey_listener():
                 user32.UnregisterHotKey(None, SCREENRECORDER_HOTKEY_ID)
             except Exception:
                 pass
+        if anika_hotkey_registered:
+            try:
+                user32.UnregisterHotKey(None, ANIKA_HOTKEY_ID)
+            except Exception:
+                pass
         converter_hotkey_registered = False
         background_remover_hotkey_registered = False
         screenshot_hotkey_registered = False
         screenrecorder_hotkey_registered = False
+        anika_hotkey_registered = False
         screenshot_hotkey_thread_id = None
 
 def start_screenshot_hotkey_listener():
@@ -4304,14 +4532,31 @@ output_frame.grid(row=4, column=0, sticky="nsew", pady=(0, 20))
 output_frame.grid_rowconfigure(1, weight=1)
 output_frame.grid_columnconfigure(0, weight=1)
 
+output_header = tk.Frame(output_frame, bg=THEME['bg'])
+output_header.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+output_header.grid_columnconfigure(0, weight=1)
+
 output_label = tk.Label(
-    output_frame,
+    output_header,
     text="Activity Log:",
     font=('Segoe UI', 12, 'bold'),
     bg=THEME['bg'],
     fg=THEME['fg']
 )
-output_label.grid(row=0, column=0, sticky="w", pady=(0, 5))
+output_label.grid(row=0, column=0, sticky="w")
+
+clear_logs_btn = tk.Label(
+    output_header,
+    text="Clear Logs",
+    font=('Segoe UI', 10),
+    bg=THEME['bg'],
+    fg=THEME['primary'],
+    cursor='hand2',
+)
+clear_logs_btn.grid(row=0, column=1, sticky="e")
+clear_logs_btn.bind('<Button-1>', lambda _event: clear_activity_log())
+clear_logs_btn.bind('<Enter>', lambda _event: clear_logs_btn.config(fg=THEME['secondary']))
+clear_logs_btn.bind('<Leave>', lambda _event: clear_logs_btn.config(fg=THEME['primary']))
 
 output_box = tk.Text(
     output_frame,
@@ -4342,7 +4587,7 @@ status_label.grid(row=0, column=0, sticky="w", padx=10)
 
 ansnew_credit_label = tk.Label(
     status_frame,
-    text="ANSNEW TECH",
+    text="ANSNEW TECH.",
     font=('Segoe UI', 9, 'bold'),
     bg=THEME['border'],
     fg=THEME['gray'],
@@ -4456,12 +4701,13 @@ def build_tray_menu():
             item('BG Remover', lambda icon=None, menu_item=None: tray_run_ui_action(open_background_remover)),
             item('YScreenshot', lambda icon=None, menu_item=None: tray_run_ui_action(open_screenshot_studio)),
             item('YScreenRecorder', lambda icon=None, menu_item=None: tray_run_ui_action(open_yscreenrecorder)),
+            item('Anika', lambda icon=None, menu_item=None: tray_run_ui_action(open_anika)),
         )),
         item('Help', pystray.Menu(
             item('About Us', lambda icon=None, menu_item=None: tray_run_ui_action(show_about_window)),
             item('Check for Updates', lambda icon=None, menu_item=None: tray_run_ui_action(force_check_updates)),
             item('Report Issue', lambda icon=None, menu_item=None: tray_run_ui_action(lambda: webbrowser.open("https://github.com/needyamin/media-downloader/issues"))),
-            item('Debug Update System', lambda icon=None, menu_item=None: tray_run_ui_action(debug_update_check)),
+            item('Update System', lambda icon=None, menu_item=None: tray_run_ui_action(debug_update_check)),
         )),
         item('Exit', tray_exit_application),
     )
@@ -4516,6 +4762,7 @@ root.bind_all('<Control-Shift-V>', trigger_converter)
 root.bind_all('<Control-Shift-B>', trigger_background_remover)
 root.bind_all('<Control-Shift-Y>', trigger_screenshot_studio)
 root.bind_all('<Control-Shift-R>', trigger_yscreenrecorder)
+root.bind_all('<Control-Shift-U>', trigger_anika)
 
 # Start tray icon
 create_tray_icon()
@@ -4655,7 +4902,6 @@ def download_media(is_audio, url=None):
     ydl_instance = None  # Reset yt-dlp instance
     
     try:
-        show_loading()  # Show loading animation
         update_progress(0, "Starting download...")  # Initialize progress bar
         
         # Verify output directories exist

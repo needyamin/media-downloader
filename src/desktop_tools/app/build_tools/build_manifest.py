@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 APP_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = REPO_ROOT / "src"
 SHARED_DIR = SRC_DIR / "desktop_tools" / "shared"
+ANIKA_DIR = SRC_DIR / "desktop_tools" / "anika"
 APP_PACKAGE = "desktop_tools.app"
 SHARED_PACKAGE = "desktop_tools.shared"
 
@@ -155,6 +156,13 @@ def discover_asset_files() -> list[Path]:
     return sorted(path for path in ASSETS_DIR.rglob("*") if path.is_file())
 
 
+def discover_anika_data_files() -> list[Path]:
+    """Return Anika mascot resources and entry scripts for packaged builds."""
+    if not ANIKA_DIR.is_dir():
+        return []
+    return sorted(path for path in ANIKA_DIR.rglob("*") if path.is_file())
+
+
 def discover_asset_names_from_source() -> set[str]:
     """Collect asset filenames referenced via get_asset_path(...) in app sources."""
     names: set[str] = set()
@@ -237,6 +245,8 @@ def nuitka_data_file_arguments() -> list[str]:
         f"--include-data-dir={ASSETS_DIR}=assets",
         f"--include-data-files={APP_FLAGS_PATH}=app_flags.json",
     ]
+    if ANIKA_DIR.is_dir():
+        args.append(f"--include-data-dir={ANIKA_DIR}=desktop_tools/anika")
 
     # Top-level copies support get_asset_path() and get_project_root() bundle fallbacks.
     for asset_path in discover_asset_files():
@@ -252,6 +262,8 @@ def linux_pyinstaller_data_arguments(os_pathsep: str) -> list[str]:
         f"--add-data={ASSETS_DIR}{os_pathsep}assets",
         f"--add-data={APP_FLAGS_PATH}{os_pathsep}.",
     ]
+    if ANIKA_DIR.is_dir():
+        args.append(f"--add-data={ANIKA_DIR}{os_pathsep}desktop_tools/anika")
 
     for asset_path in discover_asset_files():
         if asset_path.parent == ASSETS_DIR:

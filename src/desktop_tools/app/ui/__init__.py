@@ -25,11 +25,23 @@ def open_yscreenrecorder(parent=None):
     from .launchers import open_yscreenrecorder as _open_yscreenrecorder
     return _open_yscreenrecorder(parent=parent)
 
+
+def open_anika(parent=None):
+    from .launchers import open_anika as _open_anika
+    return _open_anika(parent=parent)
+
+
+def open_anika_settings(parent=None):
+    from .launchers import open_anika_settings as _open_anika_settings
+    return _open_anika_settings(parent=parent)
+
 __all__ = [
     "open_main_hub",
     "open_converter",
     "open_background_remover",
     "open_screenshot_studio",
+    "open_anika",
+    "open_anika_settings",
     "open_yscreenrecorder",
 ]
 

@@ -6,6 +6,8 @@ from desktop_tools.tools.media_downloader.launchers import (
     open_background_remover as launch_background_remover_tool,
     open_converter as launch_converter_tool,
     open_screenshot_studio as launch_screenshot_tool,
+    open_anika as launch_anika_tool,
+    open_anika_settings as launch_anika_settings_tool,
     open_yscreenrecorder as launch_screenrecorder_tool,
 )
 
@@ -15,6 +17,8 @@ def open_tool_window(*, launcher, root, log, messagebox_module, success_log_mess
     try:
         opened_window = launcher(root)
         if opened_window is not None:
+            log(success_log_message)
+        elif success_log_message:
             log(success_log_message)
     except Exception as exc:
         log(f"Error opening desktop tool ({success_log_message}): {exc}")
@@ -67,4 +71,25 @@ def open_yscreenrecorder(*, root, log, messagebox_module):
         error_title="YScreenRecorder Error",
         error_message="Could not open YScreenRecorder",
     )
+
+
+def open_anika_settings(*, root, log, messagebox_module):
+    open_tool_window(
+        launcher=launch_anika_settings_tool,
+        root=root,
+        log=log,
+        messagebox_module=messagebox_module,
+        success_log_message="Opened Anika Break Settings",
+        error_title="Anika Settings Error",
+        error_message="Could not open Anika settings",
+    )
+
+
+def open_anika(*, root, log, messagebox_module):
+    try:
+        launch_anika_tool(root)
+        log("Opened Anika")
+    except Exception as exc:
+        log(f"Error opening desktop tool (Opened Anika): {exc}")
+        messagebox_module.showerror("Anika Error", f"Could not open Anika:\n{exc}")
 

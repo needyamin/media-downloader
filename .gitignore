@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
 *.so
 *.pyd
 *.dll
@@ -30,14 +31,32 @@ htmlcov/
 pip-wheel-metadata/
 *.egg-info/
 .eggs/
+.tox/
+.nox/
+.hypothesis/
 
 # IDE and OS files
 .vscode/
 .idea/
 .cursor/
+*.code-workspace
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# -----------------------------------------------------------------------------
+# Anika desktop pet (src/desktop_tools/anika/)
+# -----------------------------------------------------------------------------
+# Legacy folder name (renamed to anika)
+src/desktop_tools/yfun/
+
+# Scratch assets and one-off image tooling (not shipped in builds)
+src/desktop_tools/anika/**/*_nobg.png
+src/desktop_tools/anika/resources/walk3.png
+src/desktop_tools/anika/resources/focus2.png
+src/desktop_tools/anika/chroma_test.py
+src/desktop_tools/anika/restore_images.py
+src/desktop_tools/anika/remove_bg_careful.py
 
 # -----------------------------------------------------------------------------
 # Desktop app packaging (Nuitka / PyInstaller / Linux AppImage)
@@ -46,7 +65,8 @@ desktop.ini
 src/desktop_tools/app/build/
 src/desktop_tools/app/dist/
 
-# Current build temp outputs under release/
+# Build temp outputs under release/
+release/
 release/**/build/
 release/**/pyinstaller-work/
 release/**/pyinstaller-dist/
@@ -59,14 +79,16 @@ release/**/appimagetool-*.AppImage
 *.onefile-build/
 *.spec
 
-# -----------------------------------------------------------------------------
-# Release outputs (do not commit installers or bundle trees)
-# -----------------------------------------------------------------------------
-release/windows/
-release/linux/
+# Packaged installers and bundles (local outputs)
+*.exe
+*.msi
+*.AppImage
+*.deb
+*.rpm
+*.zip
 
 # -----------------------------------------------------------------------------
-# Build diagnostics and temp files
+# Build diagnostics and temp / runtime files
 # -----------------------------------------------------------------------------
 nuitka-crash-report*.xml
 *.tmp
@@ -76,3 +98,7 @@ nuitka-crash-report*.xml
 *.ytdl
 *.temp
 *.log
+
+# yt-dlp / downloader scratch (if written under project tree)
+*.f4m
+*.m3u8.part
