@@ -33,11 +33,12 @@ It is built for Windows and Linux, with one shared UI hub, tray actions, and key
 ## Main Features
 
 - One launcher window for all tools
-- Shared managed FFmpeg workflow
-- Direct-download queue with persistent history
-- Local AI background remover (`rembg` + ONNX Runtime)
+- **Download List** — IDM-style queue (add, pause, resume, replace broken links, history) with a compact icon toolbar
+- Shared managed FFmpeg workflow (auto-install/update)
+- Background remover: **classic `u2net` by default**; premium models (`BiRefNet`, `BRIA`) download only with your consent and show live progress
 - Screenshot and recording overlays with quick controls
-- **Anika** launched from the hub (no extra system-tray icon when started from Media Downloader)
+- **Anika** desktop companion from **Tools → Anika** (separate process; no duplicate tray icon when launched from the hub)
+- Packaged apps **auto-update** from GitHub Releases (Windows installer); releases ship **compiled binaries only** (no source zip)
 - Configurable behavior via `app_flags.json`
 
 ---
@@ -56,7 +57,7 @@ It is built for Windows and Linux, with one shared UI hub, tray actions, and key
 
 ### Anika (desktop companion)
 
-Open from **Tools → Anika** or **`Ctrl+Shift+U`**. Anika runs in a separate process and opens her settings panel on first launch.
+Open from **Tools → Anika** or **`Ctrl+Shift+U`**. Anika runs in a separate process. If she is already running, another click brings her window to the front.
 
 Highlights:
 
@@ -139,6 +140,13 @@ With `PYTHONPATH=src`:
 python -m desktop_tools.tools.smoke_checks
 python -m desktop_tools.tools.script_checks
 python -m desktop_tools.tools.anika_checks
+python -m desktop_tools.tools.bg_remover_checks
+python -m desktop_tools.tools.uninstall_cleanup_checks
+```
+
+Optional (import-boundary lint for contributors):
+
+```bash
 python -m desktop_tools.tools.architecture_guard
 ```
 
@@ -167,6 +175,8 @@ Pushing a version tag builds **compiled** Windows and Linux artifacts only — n
 
 Manual CI run: **Actions → Release (Nuitka + AppImage) → Run workflow** and enter a version like `2.0.1`.
 
+**Local Windows build tip:** use Python **3.12 or 3.13** for Nuitka. On Python 3.14+, the build script tries `py -3.13` automatically when available.
+
 WSL Linux build from Windows:
 
 ```powershell
@@ -191,6 +201,7 @@ Common keys:
 - `versions.*`
 - `paths.*`
 - `themes.*`
+- `updates.packaged_auto_update`, `updates.github_repo`
 
 Anika-specific settings (break timing, edge hide, mascot size, etc.) live under `%LOCALAPPDATA%\Media Downloader\anika\`, not in `app_flags.json`. Uninstalling via the Windows installer removes that folder, downloaded AI models, ffmpeg cache, and legacy `.u2net` / `.yamos_witch_mate` data (not your Downloads folder).
 

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Media Downloader — free desktop app to download videos, manage file downloads, convert videos, remove backgrounds, and capture your screen.">
-  <title>Media Downloader — Free Desktop Download Suite</title>
+  <meta name="description" content="Media Downloader — free desktop app to download videos, manage an IDM-style download queue, convert media, remove backgrounds with AI, capture your screen, and meet Anika, your desktop companion.">
+  <title>Media Downloader — Download, Convert, Capture &amp; Anika</title>
   <link rel="icon" href="https://download.ansnew.com/favicon.ico" type="image/x-icon">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -193,7 +193,8 @@
     .feat li::before { content: '✓'; position: absolute; left: 0; color: var(--emerald-600); font-weight: 600; font-size: .75rem; }
 
     /* ── All tools strip ── */
-    .tools-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    .tools-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    .feat-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     .ts {
       text-align: center;
       padding: 14px 8px;
@@ -252,7 +253,8 @@
       .what-grid { grid-template-columns: 1fr 1fr; }
       .steps { grid-template-columns: 1fr; }
       .feat-grid { grid-template-columns: 1fr; }
-      .tools-strip { grid-template-columns: repeat(3, 1fr); }
+      .tools-strip { grid-template-columns: repeat(4, 1fr); }
+      .feat-grid-3 { grid-template-columns: 1fr; }
       .dl-row { grid-template-columns: 1fr; }
     }
     @media (max-width: 580px) {
@@ -282,6 +284,7 @@
         <li><a href="#what">What it does</a></li>
         <li><a href="#features">Features</a></li>
         <li><a href="#tools">Tools</a></li>
+        <li><a href="#anika">Anika</a></li>
         <li><a href="#download">Download</a></li>
         <li style="margin-left:6px"><a class="btn btn-fill btn-sm" href="https://github.com/needyamin/media-downloader/releases" target="_blank" rel="noreferrer">Get it free</a></li>
       </ul>
@@ -296,9 +299,9 @@
     <div class="wrap">
       <div>
         <div class="hero-label"><span class="dot"></span> Free &amp; Open Source</div>
-        <h1>One app to <em>download</em>, <em>convert</em> &amp; <em>capture</em> media</h1>
+        <h1>One app to <em>download</em>, <em>convert</em>, <em>capture</em> &amp; <em>companion</em></h1>
         <p class="hero-sub">
-          <strong>Media Downloader</strong> is a free desktop app that combines 6 tools into one: download videos from websites, manage file downloads, convert video formats, remove image backgrounds, take screenshots, and record your screen.
+          <strong>Media Downloader</strong> is a free desktop app with <strong>7 tools in one hub</strong>: stream downloads, an IDM-style download queue, video conversion, AI background removal, screenshots, screen recording, and <strong>Anika</strong> — an optional desktop mascot with break reminders.
         </p>
         <p class="hero-sub" style="font-size:.88rem">
           Works on <strong>Windows</strong> and <strong>Linux</strong>. No account needed. No ads. MIT licensed.
@@ -326,7 +329,7 @@
     <div class="wrap">
       <div class="sec-head centered rv">
         <h2>What can you do with it?</h2>
-        <p>Four things, one app. Pick what you need.</p>
+        <p>Core workflows in one app — pick what you need.</p>
       </div>
       <div class="what-grid">
         <div class="what-card rv">
@@ -334,14 +337,14 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </div>
           <h3>Download Videos</h3>
-          <p>Paste a URL → choose quality → download. Supports many public video sites.</p>
+          <p>Paste a URL → choose quality → download. Playlists supported. Clipboard can auto-detect links.</p>
         </div>
         <div class="what-card rv">
           <div class="what-icon wi-amber">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           </div>
-          <h3>Manage Downloads</h3>
-          <p>Queue any file link — .mp4, .zip, .exe. Pause, resume, and track progress like IDM.</p>
+          <h3>Download List</h3>
+          <p>Queue direct file links — pause, resume, replace broken URLs, and manage history (IDM-style).</p>
         </div>
         <div class="what-card rv">
           <div class="what-icon wi-violet">
@@ -377,7 +380,7 @@
         <div class="step rv">
           <div class="step-num">2</div>
           <h3>Paste a link or open a tool</h3>
-          <p>Paste a video URL to download it, or open any built-in tool from the menu — converter, screenshot, recorder, and more.</p>
+          <p>Paste a video URL to download it, open the Download List for direct files, or launch any tool from the menu — converter, BG remover, screenshot, recorder, or Anika.</p>
         </div>
         <div class="step rv">
           <div class="step-num">3</div>
@@ -416,9 +419,9 @@
           </div>
           <p>For direct file links — .mp4, .mp3, .zip, .exe, images, archives. Works like Internet Download Manager.</p>
           <ul>
+            <li>Icon toolbar: add URL, resume, pause, open file/folder, and more</li>
             <li>Queue multiple downloads at once</li>
-            <li>Pause, resume, and cancel anytime</li>
-            <li>Replace broken links on failed items</li>
+            <li>Pause, resume, cancel, and replace broken links</li>
             <li>Persistent history across sessions</li>
           </ul>
         </div>
@@ -430,8 +433,9 @@
           <p>Two processing tools that share the same FFmpeg engine, managed automatically.</p>
           <ul>
             <li>Batch convert videos with quality presets</li>
-            <li>Remove image backgrounds with AI (rembg)</li>
-            <li>Preview cutouts and export transparent PNG</li>
+            <li>Classic <code>u2net</code> model by default — fast and offline-ready</li>
+            <li>Premium AI models (BiRefNet, BRIA) — download only when you choose</li>
+            <li>Live download progress for large ONNX models</li>
             <li>FFmpeg installs and updates itself</li>
           </ul>
         </div>
@@ -452,11 +456,35 @@
     </div>
   </section>
 
-  <!-- ALL 6 TOOLS — quick strip -->
+  <!-- Anika -->
+  <section id="anika" class="sec-gray">
+    <div class="wrap">
+      <div class="sec-head centered rv">
+        <h2>Meet Anika</h2>
+        <p>Optional desktop companion for Windows — break reminders, spell book, timer, and personality.</p>
+      </div>
+      <div class="feat-grid-3">
+        <div class="feat rv">
+          <div class="feat-top"><span class="feat-dot fd-violet"></span><h3>Break reminders</h3></div>
+          <p>Configurable interval and how long she stays on screen when it is time to rest.</p>
+        </div>
+        <div class="feat rv">
+          <div class="feat-top"><span class="feat-dot fd-amber"></span><h3>Edge hide &amp; peek</h3></div>
+          <p>Drag Anika to a screen edge to tuck her away; hover the edge to peek back.</p>
+        </div>
+        <div class="feat rv">
+          <div class="feat-top"><span class="feat-dot fd-green"></span><h3>Hub integration</h3></div>
+          <p><kbd>Ctrl+Shift+U</kbd> or <strong>Tools → Anika</strong>. Windows builds include <code>Anika.exe</code> beside the main app.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ALL 7 TOOLS — quick strip -->
   <section id="tools">
     <div class="wrap">
       <div class="sec-head rv">
-        <h2>All 6 tools included</h2>
+        <h2>All 7 tools included</h2>
         <p>Every tool launches from one app — menu bar, system tray, or keyboard shortcut.</p>
       </div>
       <div class="tools-strip">
@@ -490,6 +518,11 @@
           <h4>YScreenRecorder</h4>
           <p>Screen recording</p>
         </div>
+        <div class="ts rv">
+          <span class="ts-icon">🧙‍♀️</span>
+          <h4>Anika</h4>
+          <p>Desktop pet</p>
+        </div>
       </div>
 
       <!-- Shortcuts -->
@@ -500,6 +533,7 @@
           <tr><td><kbd>Ctrl+Shift+B</kbd></td><td>Open BG Remover</td></tr>
           <tr><td><kbd>Ctrl+Shift+Y</kbd></td><td>Take a screenshot</td></tr>
           <tr><td><kbd>Ctrl+Shift+R</kbd></td><td>Start screen recording</td></tr>
+          <tr><td><kbd>Ctrl+Shift+U</kbd></td><td>Open Anika (Windows)</td></tr>
           <tr><td><kbd>Ctrl+Shift+P</kbd></td><td>Pause / resume recording</td></tr>
           <tr><td><kbd>Ctrl+Shift+S</kbd></td><td>Finish &amp; save recording</td></tr>
         </table>
@@ -517,7 +551,7 @@
       <div class="dl-row">
         <div class="dl-card dl-highlight rv">
           <h3>⊞ Windows</h3>
-          <p>Download <code>MediaDownloader_Setup.exe</code> from GitHub Releases. It installs a standalone bundle with all 6 tools, bundled assets, <code>app_flags.json</code>, and auto-managed FFmpeg. Supports silent background updates when a newer installer is published.</p>
+          <p>Download <code>MediaDownloader_Setup.exe</code> from GitHub Releases. Nuitka standalone + Inno Setup — all 7 tools, <code>Anika.exe</code>, bundled assets, and auto-managed FFmpeg. Installed apps check for updates and can install a newer release silently (<code>updates.packaged_auto_update</code>). Releases ship compiled binaries only (no source archive).</p>
           <a class="btn btn-blue btn-sm" href="https://github.com/needyamin/media-downloader/releases/latest" target="_blank" rel="noreferrer">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download for Windows
@@ -532,12 +566,12 @@
           <h3>🛠 Build from source</h3>
           <p>Clone the repo, then install deps and run the hub:</p>
           <p style="margin-top:8px;font-size:.8rem;line-height:1.7"><code>pip install -r src/desktop_tools/app/requirements.txt</code><br><code>python run.py</code></p>
-          <p style="margin-top:8px;font-size:.82rem">Windows installer build (Nuitka standalone + Inno Setup 6): <code>python -m desktop_tools.app.build_tools.nuitka</code>. Python <strong>3.12–3.13</strong> is recommended for Nuitka.</p>
-          <a class="btn btn-ghost btn-sm" href="https://github.com/needyamin/media-downloader#installation" target="_blank" rel="noreferrer">Full README guide</a>
+          <p style="margin-top:8px;font-size:.82rem">Windows: <code>python -m desktop_tools.app.build_tools.nuitka</code> · Linux AppImage: <code>python -m desktop_tools.app.build_tools.linux_appimage</code>. Use Python <strong>3.12–3.13</strong> for Nuitka. Tag <code>v2.0.1</code> → GitHub Actions builds and publishes the release.</p>
+          <a class="btn btn-ghost btn-sm" href="https://github.com/needyamin/media-downloader#run-from-source" target="_blank" rel="noreferrer">Full README guide</a>
         </div>
         <div class="dl-card rv">
-          <h3>⚙ Configuration</h3>
-          <p>Edit <code>app_flags.json</code> to toggle debug logging, block specific domains, or adjust clipboard monitoring. Optional SignPath for Windows code signing.</p>
+          <h3>⚙ Configuration &amp; data</h3>
+          <p>Edit <code>app_flags.json</code> for hotkeys, domains, and updates. App data lives under <code>%LOCALAPPDATA%\Media Downloader\</code> (Anika settings, rembg models, ffmpeg cache). Uninstall removes that folder — not your Downloads.</p>
         </div>
       </div>
     </div>
