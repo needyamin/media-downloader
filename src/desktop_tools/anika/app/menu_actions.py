@@ -1,4 +1,4 @@
-"""Shared right-click menu actions for Anika (pet + settings GUI)."""
+"""Shared right-click menu actions for Anika (assistant window + settings GUI)."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def populate_tk_context_menu(menu, pet) -> None:
         menu.add_command(label=label, command=lambda k=_key: run_pet_menu_action(pet, k))
 
     menu.add_separator()
-    menu.add_command(label="⚙️ Mascot Settings", command=pet.open_settings)
+    menu.add_command(label="⚙️ Assistant Settings", command=pet.open_settings)
 
     actions_menu = tk.Menu(menu, tearoff=0)
     for _key, label in PET_FORCE_ACTIONS:

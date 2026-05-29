@@ -33,7 +33,7 @@ def open_yscreenrecorder(parent=None):
 
 
 def open_anika(parent=None):
-    """Open the Anika desktop mascot."""
+    """Open the Anika desktop assistant."""
     return _open_anika(parent)
 
 

@@ -1,4 +1,4 @@
-"""Runtime checks for the Anika desktop pet package."""
+"""Runtime checks for the Anika desktop assistant package."""
 
 from __future__ import annotations
 

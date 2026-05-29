@@ -36,7 +36,7 @@ def main():
 
     debug = os.environ.get("ANIKA_DEBUG", "").strip().lower() in ("1", "true", "yes")
     if debug:
-        print("Launching Anika, your Bangladeshi Witch companion...")
+        print("Launching Anika, your Bangladeshi Witch desktop assistant...")
 
     app = DesktopPet()
     try:

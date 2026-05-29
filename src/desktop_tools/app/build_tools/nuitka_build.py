@@ -396,12 +396,12 @@ def _find_newest_exe(search_dir: Path, preferred_names: tuple[str, ...]) -> Path
 
 
 def build_anika_companion() -> None:
-    """Build a standalone Anika.exe companion placed beside the main hub binary."""
+    """Build a standalone Anika.exe desktop assistant placed beside the main hub binary."""
     if not ANIKA_MAIN_SCRIPT.is_file():
-        print("Anika entry script missing; skipping companion build.")
+        print("Anika entry script missing; skipping assistant build.")
         return
 
-    print("Building Anika companion executable with Nuitka...")
+    print("Building Anika desktop assistant executable with Nuitka...")
     anika_output_dir = BUILD_DIR / "anika"
     anika_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -438,7 +438,7 @@ def build_anika_companion() -> None:
     try:
         subprocess.run(anika_args, check=True, cwd=str(ANIKA_DIR), env=env)
     except subprocess.CalledProcessError as exc:
-        print(f"Anika companion build failed with error code {exc.returncode}")
+        print(f"Anika assistant build failed with error code {exc.returncode}")
         print("The hub installer will still ship Anika source assets, but Tools -> Anika may not work until Anika.exe is built.")
         return
 
@@ -453,12 +453,12 @@ def build_anika_companion() -> None:
         return
 
     if not STANDALONE_DIST_DIR.exists():
-        print(f"Main bundle directory missing; cannot copy Anika companion: {STANDALONE_DIST_DIR}")
+        print(f"Main bundle directory missing; cannot copy Anika assistant: {STANDALONE_DIST_DIR}")
         return
 
     destination = STANDALONE_DIST_DIR / ANIKA_OUTPUT_EXE_WIN
     shutil.copy2(built_exe, destination)
-    print(f"Anika companion copied to: {destination}")
+    print(f"Anika assistant executable copied to: {destination}")
 
 
 def build_executable() -> None:

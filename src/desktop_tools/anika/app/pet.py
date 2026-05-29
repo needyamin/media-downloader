@@ -274,7 +274,7 @@ class DesktopPet(tk.Tk):
         self.attributes("-alpha", opacity)
 
     def update_dimensions(self, *, anchor_bottom=True):
-        """Resize the transparent window to fit the scaled mascot (not just the canvas)."""
+        """Resize the transparent window to fit the scaled assistant character (not just the canvas)."""
         scale = float(self.pet_config.get("scale") or 1.4)
         scale = max(0.5, min(2.5, scale))
 

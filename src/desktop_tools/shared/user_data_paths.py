@@ -31,7 +31,7 @@ def get_rembg_models_dir() -> Path:
 
 
 def get_anika_user_dir() -> Path:
-    """Directory for Anika pet settings and session files."""
+    """Directory for Anika desktop assistant settings and session files."""
     target = get_app_user_data_dir() / ANIKA_DATA_DIRNAME
     target.mkdir(parents=True, exist_ok=True)
     _migrate_tree(LEGACY_ANIKA_DIR, target)

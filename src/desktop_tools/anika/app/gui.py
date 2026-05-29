@@ -82,7 +82,7 @@ def open_settings_window(pet):
     header = ctk.CTkFrame(win, fg_color=theme["frame"], corner_radius=10, border_width=1, border_color=border)
     header.pack(fill="x", padx=18, pady=(16, 8))
     ctk.CTkLabel(
-        header, text="Anika — Mascot & Tools", font=("Segoe UI", 17, "bold"),
+        header, text="Anika — Desktop Assistant", font=("Segoe UI", 17, "bold"),
         text_color=theme["text"]
     ).pack(anchor="w", padx=14, pady=(12, 2))
     ctk.CTkLabel(
@@ -248,13 +248,13 @@ def _make_edge_hide_controls(parent, pet, theme, accent, accent_hover):
 def _make_scale_slider(parent, pet, theme, accent, accent_hover):
     frame = ctk.CTkFrame(parent, fg_color=theme["frame"], corner_radius=10)
     frame.pack(fill="x", padx=8, pady=6)
-    lbl = ctk.CTkLabel(frame, text=f"📏 Mascot Size: {pet.pet_config.get('scale'):.1f}x",
+    lbl = ctk.CTkLabel(frame, text=f"📏 Assistant Size: {pet.pet_config.get('scale'):.1f}x",
                         font=("Segoe UI", 11, "bold"), text_color=theme["text"])
     lbl.pack(anchor="w", padx=15, pady=(8, 0))
 
     def on_change(val):
         val = round(val, 1)
-        lbl.configure(text=f"📏 Mascot Size: {val}x")
+        lbl.configure(text=f"📏 Assistant Size: {val}x")
         pet.pet_config.set("scale", val)
         pet.update_dimensions()
         pet.assets.clear_cache()
@@ -457,7 +457,7 @@ def _make_menu_panel(parent, pet, theme, accent, accent_hover):
 
     ctk.CTkButton(
         tools_frame,
-        text="⚙️ Mascot Settings (this window)",
+        text="⚙️ Assistant Settings (this window)",
         anchor="w",
         font=("Segoe UI", 11, "bold"),
         command=lambda: _bring_to_front("settings"),

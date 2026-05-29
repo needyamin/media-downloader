@@ -1,4 +1,4 @@
-"""Launch the Anika desktop mascot in an isolated subprocess."""
+"""Launch the Anika desktop assistant in an isolated subprocess."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def _launch_command(anika_dir: Path) -> list[str]:
             return [str(packaged_exe)]
     if _is_frozen():
         raise FileNotFoundError(
-            "Anika companion executable was not found in this packaged build. "
+            "Anika assistant executable was not found in this packaged build. "
             "Rebuild the installer so Anika.exe is included beside Media-Downloader.exe."
         )
 
@@ -185,7 +185,7 @@ def open_anika(parent=None) -> str:
             parent,
             "Anika",
             "Anika is available on Windows desktop builds.\n"
-            "This Linux build ships her assets, but the mascot runs on Windows only.",
+            "This Linux build ships her assets, but the desktop assistant runs on Windows only.",
         )
         return "failed"
 
@@ -242,7 +242,7 @@ def open_anika(parent=None) -> str:
 
 
 def terminate_anika() -> None:
-    """Stop the Anika companion process if the hub launched it."""
+    """Stop the Anika assistant process if the hub launched it."""
     global _ANIKA_PROCESS
     proc = _ANIKA_PROCESS
     _ANIKA_PROCESS = None

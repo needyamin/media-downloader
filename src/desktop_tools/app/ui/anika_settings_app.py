@@ -195,7 +195,7 @@ class AnikaBreakSettingsWindow(tk.Toplevel):
 
         tk.Label(
             body,
-            text="Tip: Open Tools → Anika for size, effects, and actions. "
+            text="Tip: Open Tools → Anika to configure your desktop assistant (size, effects, actions). "
             "Anika picks up saved break timing within about 30 seconds.",
             font=("Segoe UI", 10),
             fg=THEME["TEXT_MUTED"],

@@ -1,6 +1,6 @@
 # Media Downloader
 
-One desktop app for downloading, converting, background removal, screenshots, screen recording, and the **Anika** desktop companion.
+One desktop app for downloading, converting, background removal, screenshots, screen recording, and **Anika** — your desktop assistant.
 
 <p align="center">
   <strong>Free · MIT licensed · No account · No ads · Offline-first</strong>
@@ -16,7 +16,7 @@ One desktop app for downloading, converting, background removal, screenshots, sc
 
 ## Overview
 
-Media Downloader combines core media tools and a desktop mascot into one workspace:
+Media Downloader combines core media tools and a desktop assistant into one workspace:
 
 - Media download from supported public URLs (video/audio)
 - Direct file download queue with resume/history
@@ -24,7 +24,7 @@ Media Downloader combines core media tools and a desktop mascot into one workspa
 - AI background removal
 - Screenshot capture
 - Screen recording
-- **Anika** — optional desktop companion (break reminders, spell book, timer, personality & effects)
+- **Anika** — optional desktop assistant (break reminders, spell book, timer, personality & effects)
 
 It is built for Windows and Linux, with one shared UI hub, tray actions, and keyboard shortcuts.
 
@@ -37,7 +37,7 @@ It is built for Windows and Linux, with one shared UI hub, tray actions, and key
 - Shared managed FFmpeg workflow (auto-install/update)
 - Background remover: **classic `u2net` by default**; premium models (`BiRefNet`, `BRIA`) download only with your consent and show live progress
 - Screenshot and recording overlays with quick controls
-- **Anika** desktop companion from **Tools → Anika** (separate process; no duplicate tray icon when launched from the hub)
+- **Anika** desktop assistant from **Tools → Anika** (separate process; no duplicate tray icon when launched from the hub)
 - Packaged apps **auto-update** from GitHub Releases (Windows installer); releases ship **compiled binaries only** (no source zip)
 - Configurable behavior via `app_flags.json`
 
@@ -53,9 +53,9 @@ It is built for Windows and Linux, with one shared UI hub, tray actions, and key
 | BG Remover | Remove image backgrounds and export PNG |
 | YScreenshot | Capture selected or full screen image |
 | YScreenRecorder | Record screen with pause/finish controls |
-| Anika | Desktop companion — break reminders, to-do spell book, chaa timer, mascot settings |
+| Anika | Desktop assistant — break reminders, to-do spell book, chaa timer, assistant settings |
 
-### Anika (desktop companion)
+### Anika (desktop assistant)
 
 Open from **Tools → Anika** or **`Ctrl+Shift+U`**. Anika runs in a separate process. If she is already running, another click brings her window to the front.
 
@@ -64,7 +64,7 @@ Highlights:
 - Break reminders (interval + how long she stays on screen)
 - Drag to a **screen edge** to hide her for a configurable time (default 5 minutes)
 - Right-click menu and **Settings → Actions** for spell book, timer, force actions, and quit
-- Mascot size, opacity, language, personality, and visual effects
+- Assistant size, opacity, language, personality, and visual effects
 - Settings stored in `%LOCALAPPDATA%\Media Downloader\` (Anika: `anika\`, BG remover models: `rembg_models\`, ffmpeg, updates). Legacy folders `.yamos_witch_mate` and `.u2net` are migrated automatically and removed on uninstall.
 
 ---
@@ -203,7 +203,7 @@ Common keys:
 - `themes.*`
 - `updates.packaged_auto_update`, `updates.github_repo`
 
-Anika-specific settings (break timing, edge hide, mascot size, etc.) live under `%LOCALAPPDATA%\Media Downloader\anika\`, not in `app_flags.json`. Uninstalling via the Windows installer removes that folder, downloaded AI models, ffmpeg cache, and legacy `.u2net` / `.yamos_witch_mate` data (not your Downloads folder).
+Anika-specific settings (break timing, edge hide, assistant size, etc.) live under `%LOCALAPPDATA%\Media Downloader\anika\`, not in `app_flags.json`. Uninstalling via the Windows installer removes that folder, downloaded AI models, ffmpeg cache, and legacy `.u2net` / `.yamos_witch_mate` data (not your Downloads folder).
 
 ---
 
@@ -217,7 +217,7 @@ media-downloader/
 ├── run.py
 └── src/desktop_tools/
     ├── app/           # Hub UI, tool windows, build tools, services
-    ├── anika/         # Desktop companion (pet process, assets, settings GUI)
+    ├── anika/         # Desktop assistant (Anika process, assets, settings GUI)
     ├── shared/        # Reusable services (ffmpeg, capture, downloads)
     ├── tools/         # Entrypoints, smoke/script/anika checks, architecture guard
     └── README.md      # Desktop architecture notes
@@ -232,7 +232,7 @@ See [src/desktop_tools/README.md](src/desktop_tools/README.md) for launcher conv
 - Python 3.12+
 - `yt-dlp`, Pillow, `pystray`, `customtkinter`
 - `rembg`, `onnxruntime`
-- Anika: Tkinter + CustomTkinter desktop pet
+- Anika: Tkinter + CustomTkinter desktop assistant
 - Packaging: Nuitka + Inno Setup (Windows), PyInstaller + AppImage flow (Linux)
 
 ---

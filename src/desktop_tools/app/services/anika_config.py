@@ -1,4 +1,4 @@
-"""Read/write Anika mascot settings (shared with the anika desktop pet process)."""
+"""Read/write Anika assistant settings (shared with the Anika desktop assistant process)."""
 
 from __future__ import annotations
 

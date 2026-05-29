@@ -99,7 +99,7 @@ class TrayIcon:
             self._icon = pystray.Icon(
                 "Anika",
                 img,
-                "Anika — Bangladeshi Witch Companion",
+                "Anika — Bangladeshi Witch Desktop Assistant",
                 menu=menu
             )
             self._icon.run()

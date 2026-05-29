@@ -181,7 +181,7 @@ def discover_asset_files() -> list[Path]:
 
 
 def discover_anika_module_names() -> list[str]:
-    """Return app.* modules shipped inside the Anika companion process."""
+    """Return app.* modules shipped inside the Anika desktop assistant process."""
     if not ANIKA_APP_DIR.is_dir():
         return []
     modules: list[str] = []
@@ -193,7 +193,7 @@ def discover_anika_module_names() -> list[str]:
 
 
 def discover_anika_data_files() -> list[Path]:
-    """Return Anika mascot resources and entry scripts for packaged builds."""
+    """Return Anika desktop assistant resources and entry scripts for packaged builds."""
     if not ANIKA_DIR.is_dir():
         return []
     files: list[Path] = []
@@ -296,7 +296,7 @@ def print_bundle_summary() -> None:
     for asset_path in discover_asset_files():
         relative = asset_path.relative_to(ASSETS_DIR)
         print(f"    - assets/{relative.as_posix()}")
-    print("  Anika companion:")
+    print("  Anika desktop assistant:")
     print(f"    - entry: {ANIKA_MAIN_SCRIPT.relative_to(REPO_ROOT).as_posix()}")
     print(f"    - packaged exe (Windows): {ANIKA_OUTPUT_EXE_WIN}")
     print("  Anika modules:")
@@ -309,7 +309,7 @@ def print_bundle_summary() -> None:
 
 
 def anika_nuitka_data_arguments() -> list[str]:
-    """Data files embedded in the standalone Anika companion binary."""
+    """Data files embedded in the standalone Anika desktop assistant binary."""
     args: list[str] = []
     if ANIKA_RESOURCES_DIR.is_dir():
         args.append(f"--include-data-dir={ANIKA_RESOURCES_DIR}=resources")
