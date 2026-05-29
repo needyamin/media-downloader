@@ -196,7 +196,7 @@ def ensure_windows_environment() -> None:
 
 
 def relaunch_with_python_313_if_available() -> None:
-    """Run this script with Python 3.13 on Windows when currently on Python 3.14+."""
+    """Run this script with Python 3.12/3.13 on Windows when currently on Python 3.14+."""
     if os.name != "nt":
         return
     if sys.version_info < (3, 14):
@@ -206,28 +206,50 @@ def relaunch_with_python_313_if_available() -> None:
 
     launcher = shutil.which("py")
     if not launcher:
-        return
-
-    try:
-        probe = subprocess.run(
-            [launcher, "-3.13", "-c", "import sys; print(sys.executable)"],
-            check=True,
-            capture_output=True,
-            text=True,
-            cwd=str(REPO_ROOT),
+        print(
+            "WARNING: Python 3.14 is experimental for Nuitka. Install Python 3.12/3.13 "
+            "or use the py launcher. Continuing with --jobs=1 for stability."
         )
-    except subprocess.CalledProcessError:
         return
 
-    py313_executable = probe.stdout.strip()
-    if not py313_executable:
-        return
+    for version in ("3.13", "3.12"):
+        try:
+            probe = subprocess.run(
+                [launcher, f"-{version}", "-c", "import sys; print(sys.executable)"],
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=str(REPO_ROOT),
+            )
+        except subprocess.CalledProcessError:
+            continue
 
-    print(f"Detected Python {sys.version_info.major}.{sys.version_info.minor}; relaunching build with Python 3.13: {py313_executable}")
-    env = os.environ.copy()
-    env["MD_SKIP_313_RELAUNCH"] = "1"
-    result = subprocess.run([py313_executable, __file__, *sys.argv[1:]], cwd=str(REPO_ROOT), env=env)
-    raise SystemExit(result.returncode)
+        target_executable = probe.stdout.strip()
+        if not target_executable:
+            continue
+
+        print(
+            f"Detected Python {sys.version_info.major}.{sys.version_info.minor}; "
+            f"relaunching build with Python {version}: {target_executable}"
+        )
+        env = os.environ.copy()
+        env["MD_SKIP_313_RELAUNCH"] = "1"
+        result = subprocess.run([target_executable, __file__, *sys.argv[1:]], cwd=str(REPO_ROOT), env=env)
+        raise SystemExit(result.returncode)
+
+    print(
+        "WARNING: Python 3.14 is experimental for Nuitka. Continuing with --jobs=1 "
+        "for stability. For faster, more reliable builds: py -3.13 -m desktop_tools.app.build_tools.nuitka"
+    )
+
+
+def nuitka_parallel_jobs(*, companion: bool = False) -> int:
+    """Pick a safe Nuitka --jobs value (avoids Scons races on Python 3.14)."""
+    if companion:
+        return 1
+    if sys.version_info >= (3, 14):
+        return 1
+    return min(CPU_JOBS, 8)
 
 
 def select_compiler_arguments() -> list[str]:
@@ -301,7 +323,7 @@ def build_nuitka_args() -> list[str]:
         f"--output-filename={OUTPUT_EXE_NAME}",
         "--standalone",
         "--module-parameter=numba-disable-jit=yes",
-        f"--jobs={CPU_JOBS}",
+        f"--jobs={nuitka_parallel_jobs()}",
         "--lto=no",
         str(MAIN_SCRIPT),
     ]
@@ -403,7 +425,11 @@ def build_anika_companion() -> None:
 
     print("Building Anika desktop assistant executable with Nuitka...")
     anika_output_dir = BUILD_DIR / "anika"
+    if anika_output_dir.exists():
+        shutil.rmtree(anika_output_dir, ignore_errors=True)
     anika_output_dir.mkdir(parents=True, exist_ok=True)
+    anika_jobs = nuitka_parallel_jobs(companion=True)
+    print(f"Anika Nuitka parallel jobs: {anika_jobs}")
 
     env = os.environ.copy()
     existing_pythonpath = env.get("PYTHONPATH", "")
@@ -419,13 +445,14 @@ def build_anika_companion() -> None:
         f"--output-dir={anika_output_dir}",
         f"--output-filename={ANIKA_OUTPUT_EXE_WIN}",
         "--standalone",
-        "--onefile",
-        f"--jobs={CPU_JOBS}",
+        f"--jobs={anika_jobs}",
         "--lto=no",
         str(ANIKA_MAIN_SCRIPT),
     ]
     anika_args.extend(select_compiler_arguments())
     anika_args.extend(anika_nuitka_data_arguments())
+    for excluded_import in EXCLUDED_IMPORTS:
+        anika_args.append(f"--nofollow-import-to={excluded_import}")
     for package_name in ANIKA_INCLUDE_PACKAGES:
         anika_args.append(f"--include-package={package_name}")
     for package_name in ANIKA_INCLUDE_PACKAGE_DATA:
@@ -463,7 +490,7 @@ def build_anika_companion() -> None:
 
 def build_executable() -> None:
     print("Building executable with Nuitka...")
-    print(f"Using up to {CPU_JOBS} parallel compiler jobs.")
+    print(f"Using up to {nuitka_parallel_jobs()} parallel compiler jobs.")
     env = os.environ.copy()
     existing_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = str(REPO_ROOT / "src") + (os.pathsep + existing_pythonpath if existing_pythonpath else "")

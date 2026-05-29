@@ -160,10 +160,44 @@ python -m desktop_tools.app.build_tools.manifest
 
 ## Build & Packaging
 
-| Platform | Build command | Output |
-|---|---|---|
-| Windows | `python -m desktop_tools.app.build_tools.nuitka` | `release/windows/MediaDownloader_Setup.exe` |
-| Linux | `python -m desktop_tools.app.build_tools.linux_appimage` | `release/linux/Media-Downloader-x86_64.AppImage` |
+| Platform | Output |
+|---|---|
+| Windows | `release/windows/MediaDownloader_Setup.exe` |
+| Linux | `release/linux/Media-Downloader-x86_64.AppImage` |
+
+### Windows (Nuitka + Inno Setup)
+
+From the **repo root** in PowerShell:
+
+```powershell
+cd C:\Users\needy\Desktop\media-downloader
+$env:PYTHONPATH = "src"
+pip install -r src\desktop_tools\app\requirements.txt nuitka ordered-set zstandard
+python -m desktop_tools.app.build_tools.nuitka
+```
+
+**Requirements**
+
+- Windows only (the script exits on Linux/macOS)
+- [Inno Setup 6](https://jrsoftware.org/isinfo.php) installed (`ISCC.exe` on PATH or default install location)
+- Python **3.12 or 3.13** recommended for Nuitka (on 3.14+, the script tries `py -3.13` when available)
+
+**Legacy script paths** (still work from repo root; they forward to the same build):
+
+```powershell
+python src\desktop_tools\app\nutika_build.py
+python src\desktop_tools\app\nuitka_build.py
+```
+
+The old file `src\desktop_tools\app\nutika_build.py` was moved to `src\desktop_tools\app\build_tools\nuitka_build.py`; the shims above avoid “file not found” errors.
+
+### Linux (AppImage)
+
+```bash
+export PYTHONPATH=src
+pip install -r src/desktop_tools/app/requirements.txt
+python -m desktop_tools.app.build_tools.linux_appimage
+```
 
 ### GitHub releases (auto-update + protected binaries)
 
@@ -175,7 +209,9 @@ Pushing a version tag builds **compiled** Windows and Linux artifacts only — n
 
 Manual CI run: **Actions → Release (Nuitka + AppImage) → Run workflow** and enter a version like `2.0.1`.
 
-**Local Windows build tip:** use Python **3.12 or 3.13** for Nuitka. On Python 3.14+, the build script tries `py -3.13` automatically when available.
+**Local Windows build tip:** use Python **3.12 or 3.13** for Nuitka. On Python 3.14+, the build script tries `py -3.13` / `py -3.12` automatically; if that is unavailable it continues with `--jobs=1` (slower but avoids Scons `__constants.h` races on Anika).
+
+If the hub exe already built and only Anika/Inno failed, re-run the full build command — it reuses the standalone dist when possible.
 
 WSL Linux build from Windows:
 

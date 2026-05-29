@@ -64,6 +64,10 @@ EXCLUDED_IMPORTS = [
     "jupyter",
     "setuptools",
     "win32com.test",
+    "gradio",
+    "gradio_client",
+    "torch",
+    "transformers",
 ]
 
 REQUIRED_DYNAMIC_MODULES = [

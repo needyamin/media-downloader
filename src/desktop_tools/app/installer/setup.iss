@@ -53,10 +53,8 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Media Downloader"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startupicon
 
 [UninstallDelete]
-; Fallback removal if [Code] DelTree is blocked; primary cleanup is in uninstall_cleanup.iss
+; Fallback removal if [Code] DelTree is blocked; legacy profile paths are removed in uninstall_cleanup.iss
 Type: filesandordirs; Name: "{localappdata}\Media Downloader"
-Type: filesandordirs; Name: "{userprofile}\.u2net"
-Type: filesandordirs; Name: "{userprofile}\.yamos_witch_mate"
 Type: files; Name: "{tmp}\media_downloader_bg_remover_diagnostics.txt"
 
 [CustomMessages]
