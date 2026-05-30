@@ -1,6 +1,6 @@
 # Media Downloader
 
-One desktop app for downloading, converting, background removal, screenshots, screen recording, and **Anika** — your desktop assistant.
+ A complete desktop app for your entire media workflow download and queue files, convert media, remove backgrounds, capture screenshots, and record your screen all in one place.
 
 <p align="center">
   <strong>Free · MIT licensed · No account · No ads · Offline-first</strong>
