@@ -14,6 +14,9 @@ One desktop app for downloading, converting, background removal, screenshots, sc
 
 ---
 
+## Screenshot
+<img width="884" height="945" alt="Image" src="https://github.com/user-attachments/assets/ef7ce79b-e73b-40aa-b6b9-ae95c4788caa" />
+
 ## Overview
 
 Media Downloader combines core media tools and a desktop assistant into one workspace:
