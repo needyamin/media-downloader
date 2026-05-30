@@ -68,6 +68,10 @@ EXCLUDED_IMPORTS = [
     "gradio_client",
     "torch",
     "transformers",
+    "cv2",
+    "aiohttp",
+    "cryptography",
+    "pydantic",
 ]
 
 REQUIRED_DYNAMIC_MODULES = [
@@ -135,6 +139,7 @@ LINUX_EXCLUDED_MODULES = [
 ]
 
 LINUX_COLLECT_ALL_PACKAGES = [
+    "yt_dlp",
     "customtkinter",
     "PIL",
     "pystray",

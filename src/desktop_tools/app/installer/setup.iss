@@ -23,7 +23,7 @@ AllowNoIcons=yes
 Compression=lzma
 SolidCompression=yes
 SetupIconFile=..\assets\needyamin.ico
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\needyamin.ico
 WizardStyle=modern
 OutputDir=..\..\..\..\release\windows
 OutputBaseFilename=MediaDownloader_Setup
@@ -42,9 +42,9 @@ Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesub
 Source: "..\assets\needyamin.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\needyamin.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\needyamin.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

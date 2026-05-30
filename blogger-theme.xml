@@ -1,16 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns='http://www.w3.org/1999/xhtml' xmlns:b='http://www.google.com/2005/gml/b' xmlns:data='http://www.google.com/2005/gml/data' xmlns:expr='http://www.google.com/2005/gml/expr'>
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Media Downloader — free desktop app to download videos, manage downloads, convert media, remove backgrounds with AI, capture your screen, and meet Anika, your optional desktop companion with break reminders and a focus timer.">
-  <title>Media Downloader — Download, Convert, Capture &amp; Anika Assistant</title>
-  <link rel="icon" href="https://download.ansnew.com/favicon.ico" type="image/x-icon">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <meta content='width=device-width, initial-scale=1' name='viewport'/>
+  <meta content='Media Downloader — free desktop app to download videos, manage downloads, convert media, remove backgrounds with AI, capture your screen, and meet Anika, your optional desktop companion with break reminders and a focus timer.' name='description'/>
+  <title><data:blog.pageTitle/></title>
+  <link expr:href='data:blog.canonicalHomepageUrl' rel='canonical'/>
+  <link href='https://download.ansnew.com/favicon.ico' rel='icon' type='image/x-icon'/>
+  <link href='https://fonts.googleapis.com' rel='preconnect'/>
+  <link crossorigin='anonymous' href='https://fonts.gstatic.com' rel='preconnect'/>
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap' rel='stylesheet'/>
+  <b:include data='blog' name='all-head-content'/>
+
+  <b:skin><![CDATA[
+/*
+-----------------------------------------------
+Blogger Template: Media Downloader Landing
+Developer: ANSNEW TECH — https://inside.ansnew.com
+----------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
       --white: #ffffff;
@@ -290,15 +299,51 @@
       .hero-actions { flex-direction: column; }
       .hero-actions .btn { justify-content: center; }
     }
-  </style>
-</head>
-<body>
 
-  <!-- Navbar -->
+/* ── Blogger overrides ── */
+#navbar, #navbar-iframe, .navbar, .blog-feeds, .post-feeds, .feed-links { display: none !important; height: 0; overflow: hidden; visibility: hidden; }
+.sidebar { display: none !important; }
+
+/* Hide blog widget output on the landing homepage */
+body.homepage #main,
+body.homepage .blog-posts,
+body.homepage .post-outer,
+body.homepage .post,
+body.homepage .post-body,
+body.homepage #Blog1,
+body.homepage .main-inner { display: none !important; visibility: hidden !important; height: 0 !important; max-height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+
+/* Always show landing content on Blogger (skip fade-in) */
+#md-landing .rv { opacity: 1 !important; transform: none !important; }
+
+/* Force landing cards/grid over Blogger defaults */
+#md-landing .feat-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+#md-landing .feat { display: block !important; background: #ffffff !important; border: 1px solid #e2e5e9 !important; border-radius: 12px !important; padding: 18px !important; margin: 0 !important; }
+#md-landing .checklist { display: block !important; margin: 6px 0 0 !important; padding: 0 !important; list-style: none !important; }
+#md-landing .check-item { display: block !important; list-style: none !important; }
+
+.not-home .blog-posts { max-width: 760px; margin: 0 auto; padding: 32px 24px; font-family: 'Inter', system-ui, sans-serif; }
+.not-home .post { margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid #e2e5e9; }
+.not-home .post-title a { color: #111827; font-size: 1.4rem; font-weight: 700; text-decoration: none; }
+.not-home .post-body { color: #374151; line-height: 1.7; margin-top: 12px; }
+.not-home .post-footer { font-size: .82rem; color: #9ca3af; margin-top: 12px; }
+.not-home-back { display: inline-flex; margin: 16px 24px 0; }
+
+@media (max-width: 860px) {
+  #md-landing .feat-grid { grid-template-columns: 1fr !important; }
+}
+]]></b:skin>
+</head>
+
+<body expr:class='data:blog.url == data:blog.homepageUrl ? &quot;md-theme homepage&quot; : &quot;md-theme not-home&quot;'>
+
+  <b:if cond='data:blog.url == data:blog.homepageUrl'>
+<div id='md-landing'>
+<!-- Navbar -->
   <nav class="nav">
     <div class="wrap">
       <a class="logo" href="#top">
-        <img src="https://download.ansnew.com/favicon.ico" alt="" width="26" height="26">
+        <img src="https://download.ansnew.com/favicon.ico" alt="" width="26" height="26" />
         Media Downloader
       </a>
       <ul class="nav-list" id="menu">
@@ -342,7 +387,7 @@
         </div>
       </div>
       <div>
-        <img class="hero-img" src="https://github.com/user-attachments/assets/9be2138d-cb43-425d-b8f9-a3c53309076f" alt="Media Downloader app window showing download interface" loading="eager">
+        <img class="hero-img" src="https://github.com/user-attachments/assets/9be2138d-cb43-425d-b8f9-a3c53309076f" alt="Media Downloader app window showing download interface" loading="eager" />
       </div>
     </div>
   </header>
@@ -630,12 +675,36 @@
       <a class="btn btn-fill btn-sm" href="https://github.com/needyamin/media-downloader/releases/latest" target="_blank" rel="noreferrer">Download now</a>
     </div>
   </footer>
+</div>
+  </b:if>
 
-  <script>
-    document.getElementById('toggle').addEventListener('click', () => document.getElementById('menu').classList.toggle('open'));
-    document.querySelectorAll('#menu a').forEach(a => a.addEventListener('click', () => document.getElementById('menu').classList.remove('open')));
-    const io = new IntersectionObserver(entries => { entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('show'); }); }, { threshold: 0.1, rootMargin: '0px 0px -20px 0px' });
-    document.querySelectorAll('.rv').forEach(el => io.observe(el));
+  <b:if cond='data:blog.url != data:blog.homepageUrl'>
+    <a class='btn btn-soft not-home-back' expr:href='data:blog.homepageUrl'>&#8592; Back to Media Downloader</a>
+  </b:if>
+
+  <b:section class='main' id='main' maxwidgets='1' showaddelement='no'>
+    <b:widget id='Blog1' locked='false' title='Blog Posts' type='Blog'/>
+  </b:section>
+
+  <b:section class='sidebar' id='sidebar' maxwidgets='10' showaddelement='yes'>
+    <b:widget id='CustomSearch1' locked='false' title='Search' type='CustomSearch'/>
+    <b:widget id='FollowByEmail1' locked='false' title='Follow By Email' type='FollowByEmail'/>
+    <b:widget id='Label1' locked='false' type='Label'/>
+  </b:section>
+
+  <script type='text/javascript'>
+  //<![CDATA[
+(function () {
+  var toggle = document.getElementById('toggle');
+  var menu = document.getElementById('menu');
+  if (toggle && menu) {
+    toggle.addEventListener('click', function () { menu.classList.toggle('open'); });
+    menu.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () { menu.classList.remove('open'); });
+    });
+  }
+})();
+  //]]>
   </script>
 
 </body>

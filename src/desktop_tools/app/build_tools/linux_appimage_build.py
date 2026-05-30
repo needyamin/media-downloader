@@ -193,8 +193,9 @@ def clean_directories() -> None:
     print("Cleaning Linux release directories...")
     LINUX_RELEASE_DIR.mkdir(parents=True, exist_ok=True)
 
+    preserve_names = {APPIMAGETOOL_NAME, "build"}
     for generated_path in LINUX_RELEASE_DIR.iterdir():
-        if generated_path.name == APPIMAGETOOL_NAME:
+        if generated_path.name in preserve_names:
             continue
         if generated_path.is_dir():
             shutil.rmtree(generated_path)
@@ -224,7 +225,7 @@ def generate_linux_icon() -> Path:
     return icon_png
 
 
-def build_pyinstaller_args() -> list[str]:
+def build_pyinstaller_args(icon_png: Path) -> list[str]:
     """Assemble the PyInstaller command line with explicit modules, package data, and exclusions."""
     pyinstaller_args = [
         get_build_python_executable(),
@@ -234,6 +235,7 @@ def build_pyinstaller_args() -> list[str]:
         "--clean",
         "--onedir",
         "--windowed",
+        f"--icon={icon_png}",
         f"--name={EXECUTABLE_NAME}",
         f"--distpath={PYINSTALLER_DIST_DIR}",
         f"--workpath={PYINSTALLER_WORK_DIR}",
@@ -255,14 +257,14 @@ def build_pyinstaller_args() -> list[str]:
     return pyinstaller_args
 
 
-def build_pyinstaller_bundle() -> Path:
+def build_pyinstaller_bundle(icon_png: Path) -> Path:
     """Create a Linux onedir bundle that will be wrapped into an AppImage."""
     print("Building Linux onedir bundle with PyInstaller...")
     env = os.environ.copy()
     existing_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = str(REPO_ROOT / "src") + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
 
-    pyinstaller_args = build_pyinstaller_args()
+    pyinstaller_args = build_pyinstaller_args(icon_png)
 
     try:
         subprocess.run(pyinstaller_args, check=True, cwd=str(REPO_ROOT), env=env)
@@ -409,10 +411,10 @@ def main() -> None:
     validate_source_tree()
     print_bundle_summary()
     print_linux_runtime_guidance()
-    ensure_build_dependencies()
     clean_directories()
+    ensure_build_dependencies()
     icon_png = generate_linux_icon()
-    bundle_dir = build_pyinstaller_bundle()
+    bundle_dir = build_pyinstaller_bundle(icon_png)
     appdir = create_appdir(bundle_dir, icon_png)
     appimagetool_path = ensure_appimagetool()
     output_path = build_appimage(appdir, appimagetool_path)

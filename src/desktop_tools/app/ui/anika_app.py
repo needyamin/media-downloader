@@ -12,7 +12,12 @@ _ANIKA_EXE_NAMES = ("Anika.exe", "Anika", "anika.exe")
 
 
 def _is_frozen() -> bool:
-    return bool(getattr(sys, "frozen", False)) or globals().get("__compiled__") is not None
+    if getattr(sys, "frozen", False) or globals().get("__compiled__") is not None:
+        return True
+    if sys.platform == "win32":
+        executable_name = Path(sys.executable).name.lower()
+        return executable_name.endswith(".exe") and executable_name not in {"python.exe", "pythonw.exe"}
+    return False
 
 
 def _bundle_root() -> Path | None:

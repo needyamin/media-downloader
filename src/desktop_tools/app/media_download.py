@@ -693,9 +693,15 @@ def toggle_auto_start():
         auto_start_enabled = is_auto_start_enabled()
 
 def is_packaged_runtime():
-    """Return True when running as a packaged Windows executable."""
+    """Return True when running as a packaged Windows executable (PyInstaller or Nuitka)."""
     executable_name = Path(sys.executable).name.lower()
-    return IS_WINDOWS and bool(getattr(sys, 'frozen', False)) and executable_name not in {'python.exe', 'pythonw.exe'}
+    if not IS_WINDOWS or executable_name in {'python.exe', 'pythonw.exe'}:
+        return False
+    if getattr(sys, 'frozen', False):
+        return True
+    if globals().get('__compiled__') is not None:
+        return True
+    return executable_name.endswith('.exe')
 
 def get_update_headers():
     """Common headers for GitHub release requests."""
@@ -4823,9 +4829,7 @@ root.bind_all('<Control-Shift-Y>', trigger_screenshot_studio)
 root.bind_all('<Control-Shift-R>', trigger_yscreenrecorder)
 root.bind_all('<Control-Shift-U>', trigger_anika)
 
-# Start tray icon
-create_tray_icon()
-start_screenshot_hotkey_listener()
+# Tray icon and screenshot hotkey start inside if __name__ == "__main__" (see below).
 
 # Update progress function to show percentage in status
 def update_progress(percent, message=None):
@@ -5499,16 +5503,15 @@ if __name__ == "__main__":
     try:
         # Check for updates on startup in the background
         start_app_update_check(user_initiated=False)
+
+        create_tray_icon()
+        start_screenshot_hotkey_listener()
         
         # Show the window by default
         root.deiconify()
         center_window(root)
         root.lift()
         root.focus_force()
-        
-        # Create tray icon but don't start minimized
-        if tray_icon is None:
-            create_tray_icon()
         
         root.mainloop()
     except KeyboardInterrupt:
