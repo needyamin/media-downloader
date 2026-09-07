@@ -17,7 +17,7 @@ A complete desktop app for your entire media workflow — download and queue fil
 ---
 
 ## Screenshot
-<img width="884" height="945" alt="Image" src="https://github.com/user-attachments/assets/ef7ce79b-e73b-40aa-b6b9-ae95c4788caa" />
+<img width="762" height="890" alt="Image" src="https://github.com/user-attachments/assets/fe7ab6cd-a7ee-480b-a9ba-73cc9467e8c2" />
 
 ## Overview
 
