@@ -15,11 +15,16 @@ jobs:
       PYTHONPATH: src
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Install Linux GUI packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk libx11-6
 
       - name: Install dependencies
         run: |
@@ -28,5 +33,7 @@ jobs:
 
       - name: Smoke and script checks
         run: |
-          python -m desktop_tools.tools.smoke_checks
-          python -m desktop_tools.tools.script_checks
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" \
+            python -m desktop_tools.tools.smoke_checks
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" \
+            python -m desktop_tools.tools.script_checks

@@ -233,6 +233,8 @@ def _should_auto_center(window) -> bool:
 
 def _schedule_auto_center(window) -> None:
     """Center a new window after it has a real size and has been mapped."""
+    jobs: list[str] = []
+
     def _run(target=window):
         if _should_auto_center(target):
             center_window(target)
@@ -247,27 +249,24 @@ def _schedule_auto_center(window) -> None:
                 pass
             target._center_map_bind = None
 
+    def _cancel(_event=None):
+        for job in jobs:
+            try:
+                window.after_cancel(job)
+            except Exception:
+                pass
+        jobs.clear()
+
     try:
-        window.after_idle(_run)
-        window.after(60, _finish)
+        jobs.append(window.after_idle(_run))
+        jobs.append(window.after(60, _finish))
 
         def _on_map(event, target=window):
             if event.widget is target:
                 _run()
 
         window._center_map_bind = window.bind("<Map>", _on_map, add="+")
-    except Exception:
-        pass
-
-    try:
-        window.after_idle(_run)
-        window.after(50, _run)
-
-        def _on_map(event, target=window):
-            if event.widget is target:
-                _run()
-
-        window._center_map_bind = window.bind("<Map>", _on_map, add="+")
+        window.bind("<Destroy>", _cancel, add="+")
     except Exception:
         pass
 

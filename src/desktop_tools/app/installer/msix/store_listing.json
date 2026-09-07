@@ -1,5 +1,5 @@
 {
-  "name": "4K Media Downloader",
+  "name": "AnsNew Tech. Media Downloader 4K",
   "publisher_display_name": "ANSNEW TECH.",
   "partner_center_id": "8a8d4a0e-0564-4c7e-9ac9-17c748e8a806",
   "store_id": "9PHDQLBB8QCK",
@@ -35,6 +35,7 @@
   ],
   "partner_center_notes": [
     "Package identity is set in the MSIX manifest. Leave the Store upload unsigned; Partner Center signs it.",
+    "runFullTrust is required for this Win32 hub (tray, hotkeys, FFmpeg, screen capture). Keep Desktop only; declare the restricted capability in the submission.",
     "If the listing type is EXE or MSI, upload MediaDownloader_Setup.exe instead of the MSIX.",
     "Enable GitHub Pages (or host privacy.html) so privacy_policy_url is a live HTTPS page.",
     "Store review may reject apps whose main purpose is downloading copyrighted video from YouTube and similar sites."

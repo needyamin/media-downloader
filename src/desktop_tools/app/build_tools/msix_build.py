@@ -10,7 +10,7 @@ from pathlib import Path
 
 from desktop_tools.app.build_tools.build_manifest import APP_FLAGS_PATH, ICON_PATH, REPO_ROOT
 
-APP_NAME = "Media Downloader 4K"
+APP_NAME = "AnsNew Tech. Media Downloader 4K"
 OUTPUT_EXE_NAME = "Media-Downloader.exe"
 DEFAULT_IDENTITY_NAME = "ANSNEWTECH.AnsNewTech.MediaDownloader4K"
 DEFAULT_PUBLISHER = "CN=087A9974-75CB-44FC-B893-8D3999E5E5E5"
@@ -45,6 +45,8 @@ def read_package_version() -> str:
     numbers = [(part if part.isdigit() else "0") for part in parts[:4]]
     while len(numbers) < 4:
         numbers.append("0")
+    # Microsoft Store requires the revision (4th) component to be 0.
+    numbers[3] = "0"
     return ".".join(numbers)
 
 
@@ -197,7 +199,15 @@ def main() -> None:
     pack_msix(package_dir, output_msix)
     signed = sign_msix_if_possible(output_msix)
 
+    version = read_package_version()
+    arch = "x64"
+    named_msix = WINDOWS_RELEASE_DIR / f"MediaDownloader_{version}_{arch}.msix"
+    if named_msix.exists():
+        named_msix.unlink()
+    shutil.copy2(output_msix, named_msix)
+
     print(f"MSIX package: {output_msix}")
+    print(f"Named copy: {named_msix}")
     print(f"Store listing copy: {listing}")
     print(f"Identity Name: {DEFAULT_IDENTITY_NAME}")
     print(f"Publisher: {DEFAULT_PUBLISHER}")
