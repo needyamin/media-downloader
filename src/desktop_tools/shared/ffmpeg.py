@@ -24,6 +24,73 @@ FFMPEG_DOWNLOAD_URLS = [
     "https://github.com/GyanD/codexffmpeg/releases/download/2023-10-08-git-10a3e7e0f8/ffmpeg-2023-10-08-git-10a3e7e0f8-essentials_build.zip",
 ]
 FFMPEG_RELEASE_API_URL = "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest"
+FFMPEG_WINGET_PACKAGE = "Gyan.FFmpeg"
+FFMPEG_DOWNLOAD_PAGE = "https://ffmpeg.org"
+
+
+def get_ffmpeg_install_help() -> str:
+    """User-facing install instructions when FFmpeg is missing."""
+    if IS_WINDOWS:
+        return (
+            "Install FFmpeg if needed:\n\n"
+            f"    Windows: winget install {FFMPEG_WINGET_PACKAGE}\n"
+            f"    Or download from {FFMPEG_DOWNLOAD_PAGE} and add bin to PATH"
+        )
+    return (
+        "Install FFmpeg if needed:\n\n"
+        "    Linux: sudo apt install ffmpeg\n"
+        f"    Or download from {FFMPEG_DOWNLOAD_PAGE} and add bin to PATH"
+    )
+
+
+def resolve_ffmpeg_pair(
+    ffmpeg_path: str | Path,
+    ffprobe_path: str | Path | None = None,
+) -> tuple[Path, Path]:
+    """Resolve ffmpeg + ffprobe from a file or folder the user selected."""
+    path = Path(ffmpeg_path).expanduser()
+    suffix = ".exe" if IS_WINDOWS else ""
+    if path.is_dir():
+        path = path / f"ffmpeg{suffix}"
+    probe = Path(ffprobe_path).expanduser() if ffprobe_path else path.parent / f"ffprobe{suffix}"
+    return path, probe
+
+
+def get_custom_ffmpeg_paths() -> tuple[Path | None, Path | None]:
+    """Return the user-selected FFmpeg override, if one is saved."""
+    metadata = load_managed_ffmpeg_metadata()
+    ffmpeg_value = str(metadata.get("custom_ffmpeg_path") or "").strip()
+    if not ffmpeg_value:
+        return None, None
+    ffprobe_value = str(metadata.get("custom_ffprobe_path") or "").strip() or None
+    return resolve_ffmpeg_pair(ffmpeg_value, ffprobe_value)
+
+
+def set_custom_ffmpeg_paths(
+    ffmpeg_path: str | Path,
+    ffprobe_path: str | Path | None = None,
+) -> tuple[str, str]:
+    """Save and verify a custom FFmpeg location."""
+    resolved_ffmpeg, resolved_ffprobe = resolve_ffmpeg_pair(ffmpeg_path, ffprobe_path)
+    if not verify_ffmpeg_binaries(resolved_ffmpeg, resolved_ffprobe):
+        raise ValueError(
+            "That location does not contain working ffmpeg and ffprobe binaries.\n\n"
+            + get_ffmpeg_install_help()
+        )
+    metadata = load_managed_ffmpeg_metadata()
+    metadata["custom_ffmpeg_path"] = str(resolved_ffmpeg)
+    metadata["custom_ffprobe_path"] = str(resolved_ffprobe)
+    save_managed_ffmpeg_metadata(metadata)
+    record_managed_ffmpeg_state(resolved_ffmpeg, resolved_ffprobe)
+    return str(resolved_ffmpeg), str(resolved_ffprobe)
+
+
+def clear_custom_ffmpeg_paths() -> None:
+    """Remove the custom FFmpeg override and return to automatic detection."""
+    metadata = load_managed_ffmpeg_metadata()
+    metadata.pop("custom_ffmpeg_path", None)
+    metadata.pop("custom_ffprobe_path", None)
+    save_managed_ffmpeg_metadata(metadata)
 
 
 def get_managed_ffmpeg_dir() -> Path:
@@ -154,6 +221,17 @@ def verify_ffmpeg_binaries(ffmpeg_path: str | Path, ffprobe_path: str | Path, lo
 
 def find_existing_ffmpeg(extra_paths: list[Path] | None = None, logger=None) -> tuple[str | None, str | None]:
     """Look for a valid FFmpeg install in standard and optional locations."""
+    custom_ffmpeg, custom_ffprobe = get_custom_ffmpeg_paths()
+    if custom_ffmpeg is not None and custom_ffprobe is not None:
+        if logger:
+            logger(f"Checking custom FFmpeg path: {custom_ffmpeg}")
+        if verify_ffmpeg_binaries(custom_ffmpeg, custom_ffprobe, logger=logger):
+            if logger:
+                logger(f"Using custom FFmpeg from: {custom_ffmpeg}")
+            return str(custom_ffmpeg), str(custom_ffprobe)
+        if logger:
+            logger("Custom FFmpeg path is set but not working. Searching other locations...")
+
     managed_ffmpeg, managed_ffprobe = get_managed_ffmpeg_paths()
     potential_ffmpeg_paths = [managed_ffmpeg]
     executable_suffix = ".exe" if IS_WINDOWS else ""
@@ -161,17 +239,20 @@ def find_existing_ffmpeg(extra_paths: list[Path] | None = None, logger=None) -> 
         logger("Searching for an existing FFmpeg installation...")
     if extra_paths:
         potential_ffmpeg_paths.extend(extra_paths)
+
+    ffmpeg_on_path = shutil.which("ffmpeg")
+    if ffmpeg_on_path:
+        potential_ffmpeg_paths.append(Path(ffmpeg_on_path))
+
     if IS_WINDOWS:
         potential_ffmpeg_paths.extend(
             [
                 Path(os.environ.get("PROGRAMFILES", "")) / "ffmpeg" / "bin" / "ffmpeg.exe",
                 Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "ffmpeg" / "bin" / "ffmpeg.exe",
+                Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe",
             ]
         )
     else:
-        ffmpeg_on_path = shutil.which("ffmpeg")
-        if ffmpeg_on_path:
-            potential_ffmpeg_paths.append(Path(ffmpeg_on_path))
         potential_ffmpeg_paths.extend(
             [
                 Path("/usr/bin/ffmpeg"),
@@ -194,6 +275,16 @@ def find_existing_ffmpeg(extra_paths: list[Path] | None = None, logger=None) -> 
     if logger:
         logger("No working FFmpeg installation was found.")
     return None, None
+
+
+def _report_download_progress(callback, message, percent=None):
+    """Call a progress callback that may accept (message) or (message, percent)."""
+    if callback is None:
+        return
+    try:
+        callback(message, percent)
+    except TypeError:
+        callback(message)
 
 
 def download_managed_ffmpeg(logger=None, progress_callback=None, release_tag: str | None = None) -> tuple[str | None, str | None]:
@@ -220,13 +311,16 @@ def download_managed_ffmpeg(logger=None, progress_callback=None, release_tag: st
             if logger:
                 logger(f"Downloading FFmpeg into: {ffmpeg_dir}")
                 logger(f"Attempting to download FFmpeg from: {download_url}")
+            _report_download_progress(progress_callback, "Starting FFmpeg download...", None)
 
             response = requests.get(download_url, stream=True, timeout=30)
             response.raise_for_status()
 
             total_size = int(response.headers.get("content-length", 0))
             downloaded = 0
-            block_size = 1024
+            last_percent = -1
+            last_unknown_report = 0
+            block_size = 64 * 1024
             zip_path = ffmpeg_dir / "ffmpeg.zip"
 
             with open(zip_path, "wb") as zip_file:
@@ -235,12 +329,23 @@ def download_managed_ffmpeg(logger=None, progress_callback=None, release_tag: st
                     zip_file.write(data)
                     if progress_callback and total_size:
                         percent = int(100 * downloaded / total_size)
-                        progress_callback(
-                            f"Downloading FFmpeg... {percent}% ({downloaded}/{total_size} bytes)"
+                        if percent != last_percent:
+                            last_percent = percent
+                            _report_download_progress(
+                                progress_callback,
+                                f"Downloading FFmpeg... {percent}% ({downloaded}/{total_size} bytes)",
+                                percent,
+                            )
+                    elif progress_callback and downloaded - last_unknown_report >= 2 * 1024 * 1024:
+                        last_unknown_report = downloaded
+                        _report_download_progress(
+                            progress_callback,
+                            f"Downloading FFmpeg... {downloaded} bytes",
+                            None,
                         )
 
             if progress_callback:
-                progress_callback("Extracting FFmpeg files...")
+                _report_download_progress(progress_callback, "Extracting FFmpeg files...", None)
 
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(ffmpeg_dir)
@@ -282,13 +387,12 @@ def ensure_managed_ffmpeg(extra_paths: list[Path] | None = None, logger=None, pr
         record_managed_ffmpeg_state(ffmpeg_path, ffprobe_path)
         return ffmpeg_path, ffprobe_path
     if logger:
+        logger("FFmpeg not found.")
+        logger(get_ffmpeg_install_help())
         if IS_WINDOWS:
-            logger("FFmpeg not found. Starting automatic download...")
+            logger("Trying automatic download as a fallback...")
         else:
-            logger(
-                "FFmpeg was not found. Install packages such as 'ffmpeg' and 'ffprobe' first "
-                "(for example: sudo apt install ffmpeg)."
-            )
+            logger("Automatic download is not available on this platform.")
     return download_managed_ffmpeg(logger=logger, progress_callback=progress_callback)
 
 
@@ -299,12 +403,21 @@ def update_managed_ffmpeg_if_needed(
     extra_paths: list[Path] | None = None,
 ) -> tuple[str | None, str | None, bool]:
     """Ensure FFmpeg exists and update it when a newer release appears or force is requested."""
+    custom_ffmpeg, custom_ffprobe = get_custom_ffmpeg_paths()
+    if custom_ffmpeg is not None and custom_ffprobe is not None and not force:
+        if verify_ffmpeg_binaries(custom_ffmpeg, custom_ffprobe, logger=logger):
+            if logger:
+                logger(f"Using custom FFmpeg path: {custom_ffmpeg}")
+            return str(custom_ffmpeg), str(custom_ffprobe), False
+
     ffmpeg_path, ffprobe_path = ensure_managed_ffmpeg(
         extra_paths=extra_paths,
         logger=logger,
         progress_callback=progress_callback,
     )
     if not ffmpeg_path or not ffprobe_path:
+        return ffmpeg_path, ffprobe_path, False
+    if custom_ffmpeg is not None:
         return ffmpeg_path, ffprobe_path, False
     if not IS_WINDOWS:
         return ffmpeg_path, ffprobe_path, False
@@ -347,3 +460,49 @@ def update_managed_ffmpeg_if_needed(
         release_tag=latest_tag,
     )
     return updated_ffmpeg_path, updated_ffprobe_path, bool(updated_ffmpeg_path and updated_ffprobe_path)
+
+
+def install_ffmpeg_with_winget(logger=None) -> tuple[str | None, str | None]:
+    """Install FFmpeg with winget on Windows, then resolve the binaries."""
+    if not IS_WINDOWS:
+        raise RuntimeError(get_ffmpeg_install_help())
+
+    winget = shutil.which("winget")
+    if not winget:
+        raise RuntimeError(
+            "winget is not available on this PC.\n\n" + get_ffmpeg_install_help()
+        )
+
+    if logger:
+        logger(f"Running: winget install {FFMPEG_WINGET_PACKAGE}")
+    result = subprocess.run(
+        [
+            winget,
+            "install",
+            "--id",
+            FFMPEG_WINGET_PACKAGE,
+            "-e",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+    if logger and output:
+        logger(output[-800:])
+
+    found_ffmpeg, found_ffprobe = find_existing_ffmpeg(logger=logger)
+    if found_ffmpeg and found_ffprobe:
+        return found_ffmpeg, found_ffprobe
+
+    already_installed = "already installed" in output.lower()
+    if result.returncode != 0 and not already_installed:
+        raise RuntimeError(
+            f"winget could not install FFmpeg (exit {result.returncode}).\n\n"
+            + get_ffmpeg_install_help()
+        )
+    raise RuntimeError(
+        "winget finished, but FFmpeg is not on PATH yet. Restart the app or choose the path manually.\n\n"
+        + get_ffmpeg_install_help()
+    )

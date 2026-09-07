@@ -52,7 +52,7 @@ def version_from_github_ref() -> str:
         return normalize_release_version(github_ref.rsplit("/", 1)[-1])
 
     raise ValueError(
-        "Could not determine release version. Set MD_RELEASE_VERSION or push a tag like v2.0.0."
+        "Could not determine release version. Set MD_RELEASE_VERSION or push a tag like v3.0.0."
     )
 
 
@@ -105,7 +105,7 @@ def write_build_info(version: str, output_dir: Path) -> Path:
         "linux_appimage": LINUX_APPIMAGE_NAME,
         "update_url": "https://github.com/needyamin/media-downloader/releases/latest",
         "packaging": {
-            "windows": "nuitka-standalone + inno-setup",
+            "windows": "pyinstaller-onedir + inno-setup",
             "linux": "pyinstaller + appimage",
             "source_in_release": False,
         },

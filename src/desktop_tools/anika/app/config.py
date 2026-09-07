@@ -1,6 +1,7 @@
 import os
 import json
 import random
+from datetime import datetime, timedelta
 
 # App directories
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -26,6 +27,40 @@ SESSION_FILE = os.path.join(USER_DATA_DIR, "session.json")
 # Ensure user data folder exists
 os.makedirs(USER_DATA_DIR, exist_ok=True)
 
+MIN_BREAK_INTERVAL_MINS = 1
+MAX_BREAK_INTERVAL_MINS = 120
+MIN_BREAK_STAY_SECS = 10
+MAX_BREAK_STAY_SECS = 300
+POMODORO_WORK_SECS = 25 * 60
+POMODORO_BREAK_SECS = 5 * 60
+TASK_REMIND_REPEAT_SECS = 30 * 60
+WORKDAY_START_HOUR = 9
+WORKDAY_LUNCH_HOUR = 12
+WORKDAY_AFTERNOON_HOUR = 13
+WORKDAY_END_HOUR = 18
+DUE_PRESETS = {
+    "now": "Now",
+    "morning": "Morning",
+    "afternoon": "Afternoon",
+    "eod": "End of day",
+    "later": "Tomorrow",
+}
+CUSTOM_TIMER_MIN_MINS = 1
+CUSTOM_TIMER_MAX_MINS = 180
+WORKDAY_BUCKETS = (
+    ("morning", "Morning"),
+    ("afternoon", "Afternoon"),
+    ("eod", "End of day"),
+    ("later", "Tomorrow"),
+    ("done", "Done"),
+)
+WORKDAY_TIMER_PRESETS = {
+    "Focus": {"secs": 25 * 60, "break_secs": 5 * 60, "auto_break": True},
+    "Deep": {"secs": 50 * 60, "break_secs": 10 * 60, "auto_break": True},
+    "Lunch": {"secs": 45 * 60, "break_secs": 0, "auto_break": False},
+    "Wrap-up": {"secs": 15 * 60, "break_secs": 0, "auto_break": False},
+}
+
 DEFAULT_CONFIG = {
     "scale": 1.4,              # 0.5 to 2.5
     "opacity": 1.0,            # 0.1 to 1.0
@@ -34,7 +69,7 @@ DEFAULT_CONFIG = {
     "gravity_enabled": True,
     "boundary_keep": True,     # Keep pet inside screen bounds
     "language": "mix",         # "en" (English), "bn" (Bengali), "mix" (Banglish/Bilingual)
-    "sound_enabled": True,
+    "sound_enabled": False,
     # New in advanced upgrade:
     "theme": "hub_match",      # default UI matches Media Downloader hub
     "personality": "playful",  # "energetic", "calm", "shy", "mischievous", "playful"
@@ -43,9 +78,11 @@ DEFAULT_CONFIG = {
     "pomodoro_count": 0,       # Total completed pomodoros
     "fairy_dust_enabled": True,
     "magic_trail_enabled": True,
+    "clock_announce": True,    # Speak the hour when the clock rolls over
+    "last_custom_timer_mins": 20,
     # Break reminder:
     "break_interval_mins": 30, # How often Anika reminds you to take a break (minutes)
-    "break_stay_secs": 8,      # How long Anika stays visible during break reminder (seconds)
+    "break_stay_secs": 10,     # How long Anika stays visible during break reminder (seconds)
     # Drag to screen edge:
     "edge_hide_enabled": True,
     "edge_hide_mins": 5,       # Minutes Anika stays away after drag-to-edge
@@ -208,6 +245,14 @@ class ConfigManager:
                     # Migrate older tiny scale settings to new default
                     if "scale" in saved and saved["scale"] < 1.2:
                         saved["scale"] = 1.4
+                    stay = saved.get("break_stay_secs")
+                    if stay is not None:
+                        try:
+                            stay_i = int(stay)
+                        except (TypeError, ValueError):
+                            stay_i = MIN_BREAK_STAY_SECS
+                        if stay_i > 0:
+                            saved["break_stay_secs"] = max(MIN_BREAK_STAY_SECS, min(MAX_BREAK_STAY_SECS, stay_i))
                     self.config.update(saved)
             except Exception as e:
                 print(f"Error loading config: {e}")
@@ -278,6 +323,439 @@ class SessionMemory:
 
 
 session_memory = SessionMemory()
+
+
+def session_reminder_milestone(mins: int) -> int:
+    """Largest whole hour of session time that should trigger a reminder."""
+    mins = int(mins or 0)
+    if mins < 60:
+        return 0
+    return (mins // 60) * 60
+
+
+def should_send_session_reminder(mins: int, last_milestone: int) -> bool:
+    milestone = session_reminder_milestone(mins)
+    return milestone >= 60 and milestone > int(last_milestone or 0)
+
+
+def clamp_break_stay_secs(value) -> int:
+    try:
+        stay = int(value or MIN_BREAK_STAY_SECS)
+    except (TypeError, ValueError):
+        stay = MIN_BREAK_STAY_SECS
+    return max(MIN_BREAK_STAY_SECS, min(MAX_BREAK_STAY_SECS, stay))
+
+
+def clamp_break_interval_mins(value) -> int:
+    try:
+        interval = int(value or 0)
+    except (TypeError, ValueError):
+        interval = 0
+    if interval <= 0:
+        return 0
+    return max(MIN_BREAK_INTERVAL_MINS, min(MAX_BREAK_INTERVAL_MINS, interval))
+
+
+def normalize_task(task: dict) -> dict:
+    task.setdefault("text", "")
+    task.setdefault("done", False)
+    task.setdefault("done_today", False)
+    task.setdefault("priority", "normal")
+    task.setdefault("category", "work")
+    task.setdefault("due", "")
+    task.setdefault("reminded_at", "")
+    task.setdefault("created", "")
+    return task
+
+
+def load_tasks() -> list:
+    if not os.path.exists(TODO_FILE):
+        return []
+    try:
+        with open(TODO_FILE, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except Exception:
+        return []
+    if not isinstance(raw, list):
+        return []
+    return [normalize_task(dict(task)) for task in raw if isinstance(task, dict)]
+
+
+def save_tasks(tasks: list) -> None:
+    os.makedirs(USER_DATA_DIR, exist_ok=True)
+    with open(TODO_FILE, "w", encoding="utf-8") as handle:
+        json.dump(tasks, handle, indent=4, ensure_ascii=False)
+
+
+def pending_task_count(tasks=None) -> int:
+    items = tasks if tasks is not None else load_tasks()
+    return sum(1 for task in items if not task.get("done"))
+
+
+def parse_due(due) -> datetime | None:
+    if not due:
+        return None
+    try:
+        return datetime.fromisoformat(str(due))
+    except (TypeError, ValueError):
+        return None
+
+
+def _at_hour(now: datetime, hour: int, minute: int = 0) -> datetime:
+    return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+def _today_or_tomorrow(target: datetime, now: datetime) -> datetime:
+    if target <= now:
+        return target + timedelta(days=1)
+    return target
+
+
+def workday_period(now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    hour = now.hour
+    if hour < WORKDAY_LUNCH_HOUR:
+        return "morning"
+    if hour < WORKDAY_AFTERNOON_HOUR:
+        return "lunch"
+    if hour < WORKDAY_END_HOUR:
+        return "afternoon"
+    return "wrapup"
+
+
+def default_task_slot(now: datetime | None = None) -> str:
+    period = workday_period(now)
+    if period == "morning":
+        return "morning"
+    if period in ("lunch", "afternoon"):
+        return "afternoon"
+    return "eod"
+
+
+def workday_hours_left(now: datetime | None = None) -> int:
+    now = now or datetime.now()
+    end = _at_hour(now, WORKDAY_END_HOUR)
+    leftover = (end - now).total_seconds()
+    if leftover <= 0:
+        return 0
+    return max(1, int((leftover + 1799) // 3600))
+
+
+def workday_headline(now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    weekday = now.strftime("%A")
+    labels = {
+        "morning": "Morning",
+        "lunch": "Lunch",
+        "afternoon": "Afternoon",
+        "wrapup": "Wrap-up",
+    }
+    return f"{weekday}  ·  {labels.get(workday_period(now), 'Today')}"
+
+
+def workday_subline(now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    hours = workday_hours_left(now)
+    if workday_period(now) == "wrapup":
+        return "Workday is done. Park leftover tasks for tomorrow."
+    if workday_period(now) == "lunch":
+        return "Lunch window. Keep the afternoon list short."
+    if hours == 1:
+        return "About 1 hour left today"
+    return f"About {hours} hours left today"
+
+
+def due_from_preset(preset: str, now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    key = (preset or "now").strip().lower()
+    if key in ("", "none", "no due"):
+        key = default_task_slot(now)
+    if key in ("15m", "30m", "1h", "2h"):
+        minutes = {"15m": 15, "30m": 30, "1h": 60, "2h": 120}[key]
+        return (now + timedelta(minutes=minutes)).isoformat(timespec="minutes")
+    if key == "now":
+        return (now + timedelta(minutes=20)).isoformat(timespec="minutes")
+    if key == "morning":
+        return _today_or_tomorrow(_at_hour(now, 11, 30), now).isoformat(timespec="minutes")
+    if key == "afternoon":
+        return _today_or_tomorrow(_at_hour(now, 16, 0), now).isoformat(timespec="minutes")
+    if key in ("eod", "evening", "end of day"):
+        return _today_or_tomorrow(_at_hour(now, 17, 30), now).isoformat(timespec="minutes")
+    if key in ("later", "tomorrow"):
+        return (_at_hour(now, 9, 30) + timedelta(days=1)).isoformat(timespec="minutes")
+    return (now + timedelta(minutes=20)).isoformat(timespec="minutes")
+
+
+def default_meridian(now: datetime | None = None, slot: str = "") -> str:
+    key = str(slot or "").strip().lower()
+    if key == "morning":
+        return "AM"
+    if key in ("afternoon", "eod", "evening"):
+        return "PM"
+    period = workday_period(now)
+    return "AM" if period == "morning" else "PM"
+
+
+def parse_clock_text(text: str, now: datetime | None = None, meridian: str | None = None) -> datetime | None:
+    """Parse times like 3:30, 15:30, 3pm. Use meridian=AM/PM when the text has no AM/PM."""
+    import re
+
+    raw = str(text or "").strip().lower()
+    if not raw:
+        return None
+    now = now or datetime.now()
+    mer = None
+    if "pm" in raw:
+        mer = "pm"
+    elif "am" in raw:
+        mer = "am"
+    elif str(meridian or "").strip().upper() == "PM":
+        mer = "pm"
+    elif str(meridian or "").strip().upper() == "AM":
+        mer = "am"
+    raw = raw.replace("a.m.", "").replace("p.m.", "").replace("am", "").replace("pm", "")
+    raw = raw.replace(".", ":").strip()
+    match = re.match(r"^(\d{1,2}):(\d{2})$", raw)
+    if match:
+        hour, minute = int(match.group(1)), int(match.group(2))
+    else:
+        match = re.match(r"^(\d{3,4})$", raw)
+        if match:
+            digits = match.group(1)
+            if len(digits) == 3:
+                hour, minute = int(digits[0]), int(digits[1:])
+            else:
+                hour, minute = int(digits[:2]), int(digits[2:])
+        else:
+            match = re.match(r"^(\d{1,2})$", raw)
+            if not match:
+                return None
+            hour, minute = int(match.group(1)), 0
+    if minute > 59:
+        return None
+    if hour > 12:
+        mer = None
+    if mer == "pm" and 1 <= hour <= 11:
+        hour += 12
+    elif mer == "am" and hour == 12:
+        hour = 0
+    elif mer == "pm" and hour == 12:
+        hour = 12
+    elif mer is None and 1 <= hour <= 7:
+        hour += 12
+    if hour > 23:
+        return None
+    return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+def due_from_slot_and_clock(
+    slot: str,
+    clock_text: str = "",
+    now: datetime | None = None,
+    meridian: str | None = None,
+) -> tuple[str, str]:
+    """Return (due_iso, slot) from a workday slot plus optional clock time."""
+    now = now or datetime.now()
+    key = (slot or default_task_slot(now)).strip().lower()
+    if key in ("tomorrow",):
+        key = "later"
+    parsed = parse_clock_text(clock_text, now, meridian=meridian)
+    if parsed is None:
+        return due_from_preset(key, now), key
+    target = parsed
+    if key == "later":
+        if target.date() <= now.date():
+            target = target + timedelta(days=1)
+        return target.isoformat(timespec="minutes"), "later"
+    if target <= now:
+        target = target + timedelta(days=1)
+        return target.isoformat(timespec="minutes"), "later"
+    if target.hour < 13:
+        key = "morning"
+    elif target.hour < 17:
+        key = "afternoon"
+    else:
+        key = "eod"
+    return target.isoformat(timespec="minutes"), key
+
+
+def format_task_when(task: dict, now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    due_at = parse_due(task.get("due"))
+    if due_at is None:
+        return format_due_label("", now, slot=str(task.get("slot") or ""))
+    stamp = due_at.strftime("%I:%M %p").lstrip("0")
+    if due_at <= now:
+        return f"Overdue {stamp}"
+    if due_at.date() > now.date():
+        return f"Tomorrow {stamp}"
+    return stamp
+
+
+def clamp_custom_timer_mins(value) -> int:
+    try:
+        minutes = int(float(value))
+    except (TypeError, ValueError):
+        minutes = 20
+    return max(CUSTOM_TIMER_MIN_MINS, min(CUSTOM_TIMER_MAX_MINS, minutes))
+
+
+def task_workday_bucket(task: dict, now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    if task.get("done"):
+        return "done"
+    due_at = parse_due(task.get("due"))
+    if due_at is not None and due_at.date() > now.date():
+        return "later"
+    slot = str(task.get("slot") or "").strip().lower()
+    if slot == "now":
+        period = workday_period(now)
+        return "afternoon" if period in ("lunch", "afternoon") else ("morning" if period == "morning" else "eod")
+    if slot in ("morning", "afternoon", "eod", "later"):
+        return slot
+    if due_at is None:
+        return default_task_slot(now)
+    if due_at.hour < 13:
+        return "morning"
+    if due_at.hour < 17:
+        return "afternoon"
+    return "eod"
+
+
+def task_is_due(task: dict, now: datetime | None = None) -> bool:
+    if task.get("done"):
+        return False
+    due_at = parse_due(task.get("due"))
+    if due_at is None:
+        return False
+    return due_at <= (now or datetime.now())
+
+
+def should_remind_task(task: dict, now: datetime | None = None) -> bool:
+    now = now or datetime.now()
+    if not task_is_due(task, now):
+        return False
+    last = parse_due(task.get("reminded_at"))
+    if last is None:
+        return True
+    return (now - last).total_seconds() >= TASK_REMIND_REPEAT_SECS
+
+
+def due_tasks_to_remind(tasks=None, now: datetime | None = None) -> list:
+    items = tasks if tasks is not None else load_tasks()
+    now = now or datetime.now()
+    return [task for task in items if should_remind_task(task, now)]
+
+
+def format_due_label(due, now: datetime | None = None, slot: str = "") -> str:
+    now = now or datetime.now()
+    due_at = parse_due(due)
+    if due_at is not None and due_at <= now:
+        return "Overdue"
+    if due_at is not None and due_at.date() > now.date():
+        return "Tomorrow"
+    if due_at is not None and 0 <= (due_at - now).total_seconds() <= 45 * 60:
+        return "Now"
+    key = str(slot or "").strip().lower()
+    labels = {"now": "Now", "morning": "Morning", "afternoon": "Afternoon", "eod": "End of day", "later": "Tomorrow"}
+    if key in labels:
+        return labels[key]
+    if due_at is None:
+        return ""
+    if due_at.hour < 13:
+        return "Morning"
+    if due_at.hour < 17:
+        return "Afternoon"
+    return "End of day"
+
+
+def workday_timer_preset(name: str) -> dict:
+    return dict(WORKDAY_TIMER_PRESETS.get(name, WORKDAY_TIMER_PRESETS["Focus"]))
+
+
+def format_clock_label(now: datetime | None = None, *, seconds: bool = True) -> str:
+    now = now or datetime.now()
+    stamp = now.strftime("%I:%M:%S %p" if seconds else "%I:%M %p")
+    return stamp.lstrip("0")
+
+
+def clock_display_parts(value: datetime) -> tuple[str, str]:
+    hour = value.hour
+    mer = "AM" if hour < 12 else "PM"
+    return f"{(hour % 12) or 12}:{value.minute:02d}", mer
+
+
+def next_half_hour_parts(now: datetime | None = None) -> tuple[str, str]:
+    now = now or datetime.now()
+    if now.minute >= 30:
+        target = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    else:
+        target = now.replace(minute=30, second=0, microsecond=0)
+    return clock_display_parts(target)
+
+
+def suggested_workday_block(now: datetime | None = None) -> str:
+    period = workday_period(now)
+    if period == "morning":
+        return "Focus"
+    if period == "lunch":
+        return "Lunch"
+    if period == "afternoon":
+        return "Deep"
+    return "Wrap-up"
+
+
+def ends_at_label(remaining_secs: int, now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    remaining_secs = max(0, int(remaining_secs or 0))
+    finish = now + timedelta(seconds=remaining_secs)
+    return f"Ends at {format_clock_label(finish, seconds=False)}"
+
+
+def due_preview_label(due: str, now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    due_at = parse_due(due)
+    if due_at is None:
+        return ""
+    stamp = format_clock_label(due_at, seconds=False)
+    if due_at.date() > now.date():
+        return f"Tomorrow, {stamp}"
+    if due_at <= now:
+        return f"Overdue if left as {stamp}"
+    return f"Today, {stamp}"
+
+
+def task_sort_key(task: dict) -> tuple:
+    due_at = parse_due(task.get("due"))
+    if due_at is None:
+        return (1, datetime.max)
+    return (0, due_at)
+
+
+def slot_key_from_label(label: str, fallback: str = "afternoon") -> str:
+    for key, name in DUE_PRESETS.items():
+        if name == label:
+            return key
+    return fallback
+
+
+def get_clock_speech(lang="mix", now: datetime | None = None) -> str:
+    now = now or datetime.now()
+    time_str = now.strftime("%I:%M %p").lstrip("0")
+    hour = now.hour
+    if 5 <= hour < 12:
+        period_en, period_bn = "Good morning", "সুপ্রভাত"
+    elif 12 <= hour < 17:
+        period_en, period_bn = "Good afternoon", "শুভ অপরাহ্ন"
+    elif 17 <= hour < 21:
+        period_en, period_bn = "Good evening", "শুভ সন্ধ্যা"
+    else:
+        period_en, period_bn = "It's late", "রাত হয়েছে"
+    if lang == "en":
+        return f"{period_en}! It's {time_str}."
+    if lang == "bn":
+        return f"{period_bn}! এখন {time_str}।"
+    return f"{period_bn}! এখন {time_str}।\n({period_en}! It's {time_str}.)"
 
 
 # Speech bubble lines database (Bilingual / Bengali / English)
@@ -375,6 +853,11 @@ SPEECH_LINES = {
         {"bn": "🙆‍♀️ হাত-পা একটু ছড়িয়ে দাও! স্ট্রেচ করো!\n(Stretch your arms and legs!)", "en": "Stretch your arms and legs!"},
         {"bn": "💧 এক গ্লাস পানি খাও! শরীর ঠান্ডা রাখো!\n(Drink a glass of water! Keep your body cool!)", "en": "Drink a glass of water!"},
         {"bn": "🚶 একটু হেঁটে আসো! রক্ত চলাচল ভালো হবে!\n(Take a short walk! Improve circulation!)", "en": "Take a short walk to improve circulation!"},
+    ],
+    "task_due": [
+        {"bn": "কাজ মনে আছে? সময় হয়ে গেছে!", "en": "Don't forget your task — it's time!"},
+        {"bn": "একটা কাজ বাকি আছে! চলো শেষ করি!", "en": "A task is waiting! Let's finish it!"},
+        {"bn": "রিমাইন্ডার! তোমার টাস্ক এখন করার সময়!", "en": "Reminder! That task is due now!"},
     ],
     "crying": [
         {"bn": "😭 উঁহুহু... কেউ আমাকে ভালোবাসে না!\n(Sniff... nobody loves me!)", "en": "Sniff... nobody loves me!"},

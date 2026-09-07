@@ -11,7 +11,6 @@ import urllib.request
 
 try:
     from .build_manifest import (
-        APP_DIR,
         ICON_PATH,
         LINUX_COLLECT_ALL_PACKAGES,
         LINUX_COLLECT_SUBMODULE_PACKAGES,
@@ -26,7 +25,6 @@ try:
     )
 except ImportError:
     from build_manifest import (
-        APP_DIR,
         ICON_PATH,
         LINUX_COLLECT_ALL_PACKAGES,
         LINUX_COLLECT_SUBMODULE_PACKAGES,

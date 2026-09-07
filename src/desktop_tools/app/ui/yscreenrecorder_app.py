@@ -10,6 +10,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import tkinter as tk
@@ -29,11 +30,13 @@ try:
 except Exception:
     from app_windowing import cleanup_hidden_root, create_hidden_root, ensure_src_on_path
 
-SRC_DIR = ensure_src_on_path(__file__)
+ensure_src_on_path(__file__)
 
-from desktop_tools.shared.ffmpeg import ensure_managed_ffmpeg, update_managed_ffmpeg_if_needed
+from desktop_tools.shared.dependency_progress import DependencyProgressPanel
+from desktop_tools.shared.ffmpeg import update_managed_ffmpeg_if_needed
 from desktop_tools.shared.capture_support import capture_desktop_snapshot, get_linux_display_name, is_linux_wayland, is_linux_x11
 from desktop_tools.shared.resources import apply_window_icon
+from desktop_tools.shared.user_data_paths import get_app_user_data_dir
 from desktop_tools.app.config.runtime_flags import SCREEN_RECORDER_OUTPUT_DIRNAME, get_tool_theme
 from desktop_tools.app.platform.hotkeys import (
     WM_HOTKEY,
@@ -73,28 +76,64 @@ PANEL_BORDER = SCREENRECORDER_THEME["PANEL_BORDER"]
 ACCENT = SCREENRECORDER_THEME["ACCENT"]
 SUCCESS = SCREENRECORDER_THEME["SUCCESS"]
 DANGER = SCREENRECORDER_THEME["DANGER"]
+RECORD_FRAME_THICKNESS = 6
+RECORD_FRAME_LIVE = DANGER
+RECORD_FRAME_PAUSED = "#F59E0B"
+WDA_EXCLUDEFROMCAPTURE = 0x00000011
+GWL_EXSTYLE = -20
+WS_EX_LAYERED = 0x00080000
+WS_EX_TRANSPARENT = 0x00000020
+WS_EX_TOOLWINDOW = 0x00000080
+WS_EX_NOACTIVATE = 0x08000000
+GA_ROOT = 2
 
 yscreenrecorder_window = None
 last_recording_path: Path | None = None
 
 
-def _default_recording_dir() -> Path:
-    """Return a writable default directory for recordings."""
-    candidates = [
-        Path.home() / "Videos",
-        Path.home() / "Downloads",
-        Path.home(),
-    ]
-    for base in candidates:
+def _dir_is_writable(path: Path) -> bool:
+    """True only when a real file can be created here (cloud stub folders fail this)."""
+    probe = path / f"ysr-write-{os.getpid()}-{int(time.time() * 1000)}.tmp"
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        return True
+    except Exception:
         try:
-            target = base / SCREEN_RECORDER_OUTPUT_DIRNAME
-            target.mkdir(parents=True, exist_ok=True)
-            return target
+            probe.unlink(missing_ok=True)
         except Exception:
+            pass
+        return False
+
+
+def _default_recording_dir(preferred: Path | None = None) -> Path:
+    """Return a writable default directory for recordings."""
+    candidates = []
+    if preferred is not None:
+        candidates.append(preferred)
+    candidates.extend(
+        [
+            Path.home() / "Videos" / SCREEN_RECORDER_OUTPUT_DIRNAME,
+            Path.home() / "Downloads" / SCREEN_RECORDER_OUTPUT_DIRNAME,
+            get_app_user_data_dir() / SCREEN_RECORDER_OUTPUT_DIRNAME,
+            Path.home() / SCREEN_RECORDER_OUTPUT_DIRNAME,
+            Path.cwd() / SCREEN_RECORDER_OUTPUT_DIRNAME,
+            Path(tempfile.gettempdir()) / SCREEN_RECORDER_OUTPUT_DIRNAME,
+        ]
+    )
+    seen: set[Path] = set()
+    for target in candidates:
+        try:
+            resolved = target.resolve()
+        except Exception:
+            resolved = target
+        if resolved in seen:
             continue
-    target = Path.cwd() / SCREEN_RECORDER_OUTPUT_DIRNAME
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+        seen.add(resolved)
+        if _dir_is_writable(target):
+            return target
+    raise RuntimeError("Could not find a writable folder for recordings.")
 
 
 def _open_path(path: Path) -> None:
@@ -112,6 +151,93 @@ def _open_path(path: Path) -> None:
         subprocess.Popen(["open", str(path)])
     else:
         subprocess.Popen(["xdg-open", str(path)])
+
+
+def inset_region_for_frame(region, thickness=RECORD_FRAME_THICKNESS, min_size=16):
+    """Shrink the capture box so a colored frame sits outside the recorded pixels."""
+    width = int(region["width"]) - (2 * thickness)
+    height = int(region["height"]) - (2 * thickness)
+    if width < min_size or height < min_size:
+        return {
+            "x": int(region["x"]),
+            "y": int(region["y"]),
+            "width": int(region["width"]),
+            "height": int(region["height"]),
+        }
+    if width % 2:
+        width -= 1
+    if height % 2:
+        height -= 1
+    return {
+        "x": int(region["x"]) + thickness,
+        "y": int(region["y"]) + thickness,
+        "width": width,
+        "height": height,
+    }
+
+
+def recording_frame_rects(region, thickness=RECORD_FRAME_THICKNESS):
+    """Return (x, y, width, height) bars around the selected recording area."""
+    x = int(region["x"])
+    y = int(region["y"])
+    width = int(region["width"])
+    height = int(region["height"])
+    inner_h = max(height - (2 * thickness), 0)
+    return (
+        (x, y, width, thickness),
+        (x, y + height - thickness, width, thickness),
+        (x, y + thickness, thickness, inner_h),
+        (x + width - thickness, y + thickness, thickness, inner_h),
+    )
+
+
+def _toplevel_hwnd(widget):
+    hwnd = int(widget.winfo_id())
+    if not IS_WINDOWS:
+        return hwnd
+    root = ctypes.windll.user32.GetAncestor(hwnd, GA_ROOT)
+    return int(root or hwnd)
+
+
+def apply_windows_overlay_flags(widget, *, click_through=False, exclude_capture=False):
+    """Keep recorder chrome on screen but out of DXGI/Desktop Duplication captures."""
+    if not IS_WINDOWS:
+        return
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = _toplevel_hwnd(widget)
+        if click_through:
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            user32.SetWindowLongW(
+                hwnd,
+                GWL_EXSTYLE,
+                style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            )
+        if exclude_capture:
+            user32.SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)
+    except Exception:
+        pass
+
+
+def force_show_toplevel(widget):
+    """Show a floating window even if its parent overlay/hub is withdrawn."""
+    try:
+        widget.deiconify()
+        widget.lift()
+        widget.attributes("-topmost", True)
+        widget.update_idletasks()
+    except Exception:
+        pass
+    if not IS_WINDOWS:
+        return
+    try:
+        hwnd = _toplevel_hwnd(widget)
+        user32 = ctypes.windll.user32
+        user32.ShowWindow(hwnd, 5)  # SW_SHOW
+        user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+    except Exception:
+        pass
+
 
 class YScreenRecorderOverlay(tk.Toplevel):
     """Overlay-based recorder with transparent area selection and bottom controls."""
@@ -172,6 +298,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self._tray_thread = None
         self._overlay_hidden_for_recording = False
         self._parent_hidden_for_recording = False
+        self._record_frame_windows = []
 
         self.control_frame = None
         self.control_window = None
@@ -324,6 +451,18 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self.minimize_btn.pack(side="left", padx=(0, 6))
         self.close_btn = self._button(utility_buttons, "Close", self.on_close, variant="secondary")
         self.close_btn.pack(side="left")
+
+        self.dep_progress = DependencyProgressPanel(
+            self.control_frame,
+            background=PANEL_BG,
+            foreground=TEXT_MAIN,
+            muted=TEXT_MUTED,
+            wraplength=540,
+            use_ttk=False,
+            layout="pack",
+            layout_kwargs={"fill": "x", "pady": (10, 0)},
+            on_visibility_change=lambda _visible: self._position_controls(),
+        )
 
         self.control_window = self.canvas.create_window(0, 0, anchor="nw", window=self.control_frame)
         self._bind_controls_drag(top_row)
@@ -629,17 +768,15 @@ class YScreenRecorderOverlay(tk.Toplevel):
                 pass
 
     def _ensure_background_controls_available(self):
-        if not IS_WINDOWS:
-            return True
-        if self._record_hotkey_registered:
-            return True
-        self._ensure_tray_icon()
-        return self._tray_icon is not None
+        return True
 
     def _recording_controls_summary(self):
         if self._record_hotkey_registered:
-            return f"Use the tray icon, {YSCREENRECORDER_PAUSE_HOTKEY_LABEL}, or {YSCREENRECORDER_FINISH_HOTKEY_LABEL} while recording."
-        return "Use the tray icon to pause or finish while recording."
+            return (
+                f"Use Pause or Finish & Save on the floating bar. "
+                f"Hotkeys: {YSCREENRECORDER_PAUSE_HOTKEY_LABEL} / {YSCREENRECORDER_FINISH_HOTKEY_LABEL}."
+            )
+        return "Use Pause or Finish & Save on the floating bar."
 
     def _paused_controls_summary(self):
         if self._record_hotkey_registered:
@@ -704,14 +841,15 @@ class YScreenRecorderOverlay(tk.Toplevel):
         if hud is not None and hud.winfo_exists():
             return hud
 
-        hud = tk.Toplevel()
+        hud = tk.Toplevel(self)
         hud.withdraw()
+        hud.overrideredirect(True)
         hud.title("YScreenRecorder")
         hud.configure(bg=PANEL_BG)
         hud.resizable(False, False)
         hud.attributes("-topmost", True)
         try:
-            hud.attributes("-alpha", 0.86)
+            hud.attributes("-alpha", 0.94)
         except Exception:
             pass
         if IS_WINDOWS:
@@ -719,66 +857,48 @@ class YScreenRecorderOverlay(tk.Toplevel):
                 hud.attributes("-toolwindow", True)
             except Exception:
                 pass
-        apply_window_icon(hud, app_id="needyamin.media_downloader")
-        hud.protocol("WM_DELETE_WINDOW", self._hide_recording_hud)
+        hud.protocol("WM_DELETE_WINDOW", self._show_recording_hud)
+        hud.update_idletasks()
+        apply_windows_overlay_flags(hud, click_through=False, exclude_capture=True)
 
         shell = tk.Frame(
             hud,
             bg=PANEL_BG,
-            highlightbackground=PANEL_BORDER,
-            highlightthickness=1,
+            highlightbackground=DANGER,
+            highlightthickness=2,
             bd=0,
-            padx=10,
-            pady=10,
+            padx=8,
+            pady=8,
         )
         shell.pack(fill="both", expand=True)
 
-        top_row = tk.Frame(shell, bg=PANEL_BG)
-        top_row.pack(fill="x")
-        title_col = tk.Frame(top_row, bg=PANEL_BG)
-        title_col.pack(side="left", fill="x", expand=True)
-        tk.Label(title_col, text="YScreenRecorder", bg=PANEL_BG, fg=TEXT_MAIN, font=("Segoe UI", 11, "bold")).pack(anchor="w")
-
-        timer_shell = tk.Frame(top_row, bg=PANEL_CHIP, highlightbackground=PANEL_BORDER, highlightthickness=1, bd=0)
-        timer_shell.pack(side="right")
-        tk.Label(timer_shell, textvariable=self.timer_state_var, bg=PANEL_CHIP, fg=ACCENT, font=("Segoe UI", 7, "bold")).pack(
-            anchor="center",
-            padx=12,
-            pady=(6, 0),
+        row = tk.Frame(shell, bg=PANEL_BG)
+        row.pack(fill="x")
+        title = tk.Label(row, text="YScreenRecorder", bg=PANEL_BG, fg=TEXT_MAIN, font=("Segoe UI", 9, "bold"))
+        title.pack(side="left", padx=(0, 10))
+        timer_shell = tk.Frame(row, bg=PANEL_CHIP, highlightbackground=PANEL_BORDER, highlightthickness=1, bd=0)
+        timer_shell.pack(side="left", padx=(0, 10))
+        tk.Label(timer_shell, textvariable=self.timer_state_var, bg=PANEL_CHIP, fg=DANGER, font=("Segoe UI", 7, "bold")).pack(
+            side="left",
+            padx=(8, 4),
+            pady=4,
         )
-        tk.Label(timer_shell, textvariable=self.timer_var, bg=PANEL_CHIP, fg=TEXT_MAIN, font=("Consolas", 14, "bold")).pack(
-            anchor="center",
-            padx=12,
-            pady=(0, 6),
+        tk.Label(timer_shell, textvariable=self.timer_var, bg=PANEL_CHIP, fg=TEXT_MAIN, font=("Consolas", 12, "bold")).pack(
+            side="left",
+            padx=(0, 8),
+            pady=4,
         )
-
-        tk.Label(
-            shell,
-            textvariable=self.summary_var,
-            bg=PANEL_BG,
-            fg=TEXT_MUTED,
-            font=("Segoe UI", 8),
-            justify="left",
-            wraplength=360,
-        ).pack(anchor="w", fill="x", pady=(10, 0))
-
-        button_row = tk.Frame(shell, bg=PANEL_BG)
-        button_row.pack(fill="x", pady=(12, 0))
-        self.recording_hud_pause_btn = self._button(button_row, "Pause", self.toggle_pause_resume, variant="warning")
-        self.recording_hud_pause_btn.configure(width=10)
+        self.recording_hud_pause_btn = self._button(row, "Pause", self.toggle_pause_resume, variant="warning")
+        self.recording_hud_pause_btn.configure(width=8)
         self.recording_hud_pause_btn.pack(side="left", padx=(0, 6))
-        self.recording_hud_finish_btn = self._button(button_row, "Finish & Save", self.finish_recording, variant="danger")
-        self.recording_hud_finish_btn.configure(width=11)
-        self.recording_hud_finish_btn.pack(side="left", padx=(0, 6))
-        self.recording_hud_open_folder_btn = self._button(button_row, "Open Folder", self.open_output_dir, variant="secondary")
-        self.recording_hud_open_folder_btn.configure(width=10)
-        self.recording_hud_open_folder_btn.pack(side="left", padx=(0, 6))
-        hide_btn = self._button(button_row, "Hide", self._hide_recording_hud, variant="secondary")
-        hide_btn.configure(width=8)
-        hide_btn.pack(side="left")
+        self.recording_hud_finish_btn = self._button(row, "Finish & Save", self.finish_recording, variant="danger")
+        self.recording_hud_finish_btn.configure(width=12)
+        self.recording_hud_finish_btn.pack(side="left")
+        self.recording_hud_open_folder_btn = None
 
-        self._bind_hud_drag(top_row)
-        self._bind_hud_drag(title_col)
+        self._bind_hud_drag(row)
+        self._bind_hud_drag(title)
+        self._bind_hud_drag(timer_shell)
 
         self.recording_hud = hud
         self._set_action_states(recording=self.recording_process is not None)
@@ -787,12 +907,63 @@ class YScreenRecorderOverlay(tk.Toplevel):
     def _show_recording_hud(self):
         hud = self._ensure_recording_hud()
         self._position_recording_hud()
+        force_show_toplevel(hud)
+        apply_windows_overlay_flags(hud, click_through=False, exclude_capture=True)
         try:
-            hud.deiconify()
-            hud.lift()
-            hud.focus_force()
+            self.after(200, self._ensure_hud_visible)
         except Exception:
             pass
+
+    def _ensure_hud_visible(self):
+        if self.recording_process is None:
+            return
+        hud = self.recording_hud
+        if hud is None or not hud.winfo_exists():
+            self._show_recording_hud()
+            return
+        try:
+            viewable = bool(hud.winfo_viewable())
+        except Exception:
+            viewable = False
+        if not viewable:
+            force_show_toplevel(hud)
+            apply_windows_overlay_flags(hud, click_through=False, exclude_capture=True)
+
+    def _hide_recording_frame(self):
+        windows = list(self._record_frame_windows)
+        self._record_frame_windows = []
+        for window in windows:
+            try:
+                if window.winfo_exists():
+                    window.destroy()
+            except Exception:
+                pass
+
+    def _show_recording_frame(self, region, *, live=True):
+        """Draw a colored edge so recording is obvious, but keep it outside the capture."""
+        self._hide_recording_frame()
+        color = RECORD_FRAME_LIVE if live else RECORD_FRAME_PAUSED
+        for x, y, width, height in recording_frame_rects(region):
+            if width < 1 or height < 1:
+                continue
+            host = self._standalone_root if self._standalone_root is not None else self
+            bar = tk.Toplevel(host)
+            bar.withdraw()
+            bar.overrideredirect(True)
+            bar.configure(bg=color)
+            try:
+                bar.attributes("-topmost", True)
+            except Exception:
+                pass
+            if IS_WINDOWS:
+                try:
+                    bar.attributes("-toolwindow", True)
+                except Exception:
+                    pass
+            bar.geometry(f"{int(width)}x{int(height)}+{int(x)}+{int(y)}")
+            force_show_toplevel(bar)
+            apply_windows_overlay_flags(bar, click_through=True, exclude_capture=True)
+            self._record_frame_windows.append(bar)
 
     def _bind_hud_drag(self, widget):
         widget.bind("<ButtonPress-1>", self._start_hud_drag, add="+")
@@ -850,7 +1021,8 @@ class YScreenRecorderOverlay(tk.Toplevel):
             pass
 
     def _session_output_dir(self):
-        session_dir = self.output_dir / f".ysr-session-{int(time.time() * 1000)}"
+        self.output_dir = _default_recording_dir(self.output_dir)
+        session_dir = self.output_dir / f"ysr-session-{int(time.time() * 1000)}"
         session_dir.mkdir(parents=True, exist_ok=True)
         return session_dir
 
@@ -1117,13 +1289,37 @@ class YScreenRecorderOverlay(tk.Toplevel):
         return self.output_dir / f"yscreenrecorder-{time.strftime('%Y%m%d-%H%M%S')}.mp4"
 
     def _background_prepare_ffmpeg(self):
+        shown = {"value": False}
         try:
-            ffmpeg_path, ffprobe_path, _updated = update_managed_ffmpeg_if_needed()
+            def on_progress(message, percent=None):
+                shown["value"] = True
+                self.after(
+                    0,
+                    lambda msg=message, pct=percent: self.dep_progress.update(
+                        message=msg,
+                        percent=pct,
+                        title="Downloading FFmpeg",
+                        indeterminate=pct is None,
+                    ),
+                )
+                self.after(0, lambda msg=message: self.status_var.set(msg))
+
+            ffmpeg_path, ffprobe_path, _updated = update_managed_ffmpeg_if_needed(
+                progress_callback=on_progress,
+            )
             self.ffmpeg_path = ffmpeg_path
             self.ffprobe_path = ffprobe_path
+            if ffmpeg_path and ffprobe_path and shown["value"]:
+                self.after(0, lambda: self.status_var.set("FFmpeg is ready."))
+            elif not ffmpeg_path:
+                self.after(0, lambda: self.status_var.set("FFmpeg is not ready yet."))
         except Exception:
             self.ffmpeg_path = None
             self.ffprobe_path = None
+            self.after(0, lambda: self.status_var.set("FFmpeg setup failed."))
+        finally:
+            if shown["value"]:
+                self.after(0, self.dep_progress.hide)
 
     def _start_background_ffmpeg_prepare(self):
         with self._ffmpeg_prepare_lock:
@@ -1135,10 +1331,10 @@ class YScreenRecorderOverlay(tk.Toplevel):
     def _ensure_ffmpeg_ready(self):
         if self.ffmpeg_path and Path(self.ffmpeg_path).exists():
             return True
-        ffmpeg_path, ffprobe_path = ensure_managed_ffmpeg()
-        self.ffmpeg_path = ffmpeg_path
-        self.ffprobe_path = ffprobe_path
-        return bool(ffmpeg_path and ffprobe_path)
+        self.status_var.set("FFmpeg is still downloading. Please try again in a moment.")
+        self.summary_var.set("A progress bar will show while FFmpeg downloads or updates.")
+        self._start_background_ffmpeg_prepare()
+        return False
 
     def _build_capture_attempts(self, region, output_path):
         common_output_args = [
@@ -1402,6 +1598,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         time.sleep(0.18)
 
     def _restore_after_recording(self):
+        self._hide_recording_frame()
         self._hide_recording_hud()
         if self._parent_hidden_for_recording and self.parent_window is not None and self.parent_window.winfo_exists():
             try:
@@ -1458,7 +1655,15 @@ class YScreenRecorderOverlay(tk.Toplevel):
                 return
             self._discard_recording_session()
             self.recording_region = dict(region)
-            self.recording_session_dir = self._session_output_dir()
+            try:
+                self.recording_session_dir = self._session_output_dir()
+            except Exception as exc:
+                messagebox.showerror(
+                    "YScreenRecorder",
+                    f"Could not create a recording folder:\n{exc}",
+                    parent=self,
+                )
+                return
 
         if not self._ensure_ffmpeg_ready():
             messagebox.showerror("YScreenRecorder", "FFmpeg is not ready yet. Please try again in a moment.", parent=self)
@@ -1473,9 +1678,11 @@ class YScreenRecorderOverlay(tk.Toplevel):
 
         try:
             output_path = self._segment_output_path()
+            capture_region = inset_region_for_frame(region)
             self._hide_recording_hud()
             self._hide_for_recording()
-            self._start_capture_process(region, output_path)
+            self._show_recording_frame(region, live=True)
+            self._start_capture_process(capture_region, output_path)
         except Exception as exc:
             self.recording_process = None
             self.recording_backend = None
@@ -1488,7 +1695,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         self.recording_output_path = output_path
         self._post_stop_action = None
         self._update_timer_display()
-        self.status_var.set("Recording is live.")
+        self.status_var.set("Recording is live. The red frame is not saved in the video.")
         self.summary_var.set(self._recording_controls_summary())
         self._set_action_states(recording=True)
         self._show_recording_hud()

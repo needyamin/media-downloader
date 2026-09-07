@@ -1,0 +1,42 @@
+{
+  "name": "4K Media Downloader",
+  "publisher_display_name": "ANSNEW TECH.",
+  "partner_center_id": "8a8d4a0e-0564-4c7e-9ac9-17c748e8a806",
+  "store_id": "9PHDQLBB8QCK",
+  "store_url": "https://apps.microsoft.com/detail/9PHDQLBB8QCK",
+  "store_protocol_link": "ms-windows-store://pdp/?productid=9PHDQLBB8QCK",
+  "msa_app_id": "9f5fbec9-7d09-4de4-8360-1a823a3a87e6",
+  "package_identity_name": "ANSNEWTECH.AnsNewTech.MediaDownloader4K",
+  "package_identity_publisher": "CN=087A9974-75CB-44FC-B893-8D3999E5E5E5",
+  "package_family_name": "ANSNEWTECH.AnsNewTech.MediaDownloader4K_7gnedkmjvvvj0",
+  "privacy_policy_url": "https://needyamin.github.io/media-downloader/privacy.html",
+  "support_url": "https://github.com/needyamin/media-downloader/issues",
+  "website_url": "https://github.com/needyamin/media-downloader",
+  "category": "Productivity",
+  "price": "Free",
+  "age_rating": "3+",
+  "short_description": "Download files, convert video, remove backgrounds, and capture your screen from one desktop hub.",
+  "description": "Media Downloader 4K is a free desktop hub for personal media work on Windows.\n\nUse it to download files from public URLs you have the right to use, queue direct downloads, convert video formats, remove image backgrounds, take screenshots, and record your screen. Anika is an optional desktop assistant for break reminders and a focus timer.\n\nNo account is required. Processing stays on your PC. Optional tools such as FFmpeg or AI models download only when needed, with a warning first.\n\nUse this app only with content you own or are allowed to download. Do not use it to infringe copyright or break a website's terms.",
+  "features": [
+    "Download public media URLs you are allowed to use",
+    "IDM-style download queue with pause and resume",
+    "Video converter with format change (MP4, MKV, and more)",
+    "AI background remover with optional model download",
+    "Screenshot and screen recorder tools",
+    "Optional Anika desktop assistant"
+  ],
+  "keywords": [
+    "download",
+    "converter",
+    "background remover",
+    "screenshot",
+    "screen recorder",
+    "ffmpeg"
+  ],
+  "partner_center_notes": [
+    "Package identity is set in the MSIX manifest. Leave the Store upload unsigned; Partner Center signs it.",
+    "If the listing type is EXE or MSI, upload MediaDownloader_Setup.exe instead of the MSIX.",
+    "Enable GitHub Pages (or host privacy.html) so privacy_policy_url is a live HTTPS page.",
+    "Store review may reject apps whose main purpose is downloading copyrighted video from YouTube and similar sites."
+  ]
+}

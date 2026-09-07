@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from desktop_tools.shared.user_data_paths import get_anika_user_dir
 
@@ -11,7 +10,7 @@ ANIKA_USER_DIR = get_anika_user_dir()
 ANIKA_CONFIG_FILE = ANIKA_USER_DIR / "config.json"
 
 DEFAULT_BREAK_INTERVAL_MINS = 30
-DEFAULT_BREAK_STAY_SECS = 8
+DEFAULT_BREAK_STAY_SECS = 10
 MIN_BREAK_INTERVAL_MINS = 1
 MAX_BREAK_INTERVAL_MINS = 120
 MIN_BREAK_STAY_SECS = 10

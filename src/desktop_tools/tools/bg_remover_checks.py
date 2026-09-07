@@ -66,14 +66,61 @@ def check_ui_builds() -> None:
     root.withdraw()
     try:
         window = tk.Toplevel(root)
-        app = BackgroundRemoverApp(window)
+        app = BackgroundRemoverApp(window, auto_prepare=False)
         root.update()
         assert app._resolve_model_key() == "u2net"
         assert "classic" in app.model_hint_var.get().lower() or "Classic" in app.model_hint_var.get()
+        assert hasattr(app, "delete_models_button")
+        assert hasattr(app, "download_progress")
+        assert hasattr(app, "copy_result_button")
+        assert hasattr(app, "paste_button")
+        assert app.copy_result_button is not None
+        app._show_download_panel("u2netp")
+        root.update()
+        assert app.download_panel.winfo_manager()
+        assert app.download_progress.winfo_height() >= 12
+        app._hide_download_panel("download")
         window.destroy()
     finally:
         root.destroy()
     print("OK bg_remover: UI builds with classic default")
+
+
+def check_clipboard_helpers() -> None:
+    from desktop_tools.shared.capture_support import grab_clipboard_image
+
+    image = grab_clipboard_image()
+    assert image is None or image.size[0] > 0
+    print("OK bg_remover: clipboard image helper")
+
+
+def check_delete_model_helper() -> None:
+    from desktop_tools.app.ui.background_remover_app import (
+        delete_rembg_model,
+        get_rembg_cache_dir,
+        is_rembg_model_cached,
+        list_downloaded_rembg_models,
+        rembg_model_dest_path,
+    )
+
+    fake = get_rembg_cache_dir() / "u2netp.onnx"
+    created = False
+    if not fake.exists():
+        fake.write_bytes(b"test-model")
+        created = True
+    try:
+        assert is_rembg_model_cached("u2netp")
+        names = {name for name, _size in list_downloaded_rembg_models()}
+        assert "u2netp" in names
+        if created:
+            removed = delete_rembg_model("u2netp")
+            assert removed > 0
+            assert not is_rembg_model_cached("u2netp")
+    finally:
+        if created and fake.exists():
+            fake.unlink()
+    assert rembg_model_dest_path("u2netp") == get_rembg_cache_dir() / "models" / "u2netp" / "u2netp.onnx"
+    print("OK bg_remover: delete model helper")
 
 
 def check_classic_removal() -> None:
@@ -139,7 +186,7 @@ def check_ui_thread_queue() -> None:
 
     root = tk.Tk()
     try:
-        app = BackgroundRemoverApp(root)
+        app = BackgroundRemoverApp(root, auto_prepare=False)
         seen: list[str] = []
 
         def worker():
@@ -160,6 +207,8 @@ def check_ui_thread_queue() -> None:
 def main() -> None:
     _ensure_src_on_path()
     check_model_tiers()
+    check_delete_model_helper()
+    check_clipboard_helpers()
     check_premium_blocked_without_consent()
     check_ui_builds()
     check_ui_thread_queue()

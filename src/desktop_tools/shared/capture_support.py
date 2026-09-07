@@ -155,6 +155,95 @@ def capture_desktop_snapshot(fallback_window=None) -> tuple[Image.Image, int, in
     raise RuntimeError(last_error or "Could not capture the screen on this platform.")
 
 
+CLIPBOARD_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif", ".tif", ".tiff"}
+
+
+def grab_clipboard_image() -> Image.Image | None:
+    """Return a copied image from the clipboard, or None if there is no image."""
+    if IS_LINUX:
+        linux_image = _grab_linux_clipboard_image()
+        if linux_image is not None:
+            return linux_image
+    try:
+        grabbed = ImageGrab.grabclipboard()
+    except Exception:
+        return None
+    if isinstance(grabbed, Image.Image):
+        return grabbed
+    if isinstance(grabbed, (list, tuple)):
+        for item in grabbed:
+            path = Path(str(item))
+            if path.suffix.lower() in CLIPBOARD_IMAGE_SUFFIXES and path.is_file():
+                try:
+                    image = Image.open(path)
+                    image.load()
+                    return image
+                except Exception:
+                    continue
+    return None
+
+
+def _grab_linux_clipboard_image() -> Image.Image | None:
+    commands: list[list[str]] = []
+    if is_linux_wayland() and shutil.which("wl-paste"):
+        commands.append(["wl-paste", "--type", "image/png"])
+    if shutil.which("xclip"):
+        commands.append(["xclip", "-selection", "clipboard", "-t", "image/png", "-o"])
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    for command in commands:
+        try:
+            result = subprocess.run(command, capture_output=True, creationflags=creationflags)
+        except Exception:
+            continue
+        if result.returncode != 0 or not result.stdout:
+            continue
+        try:
+            image = Image.open(io.BytesIO(result.stdout))
+            image.load()
+            return image
+        except Exception:
+            continue
+    return None
+
+
+def copy_image_to_clipboard(image: Image.Image) -> None:
+    """Copy an image so other apps can paste it."""
+    if IS_WINDOWS:
+        _copy_image_to_windows_clipboard(image)
+        return
+    if IS_LINUX:
+        copy_image_to_linux_clipboard(image)
+        return
+    raise RuntimeError("Clipboard image copy is available on Windows and Linux only.")
+
+
+def _copy_image_to_windows_clipboard(image: Image.Image) -> None:
+    try:
+        import win32clipboard
+    except Exception as exc:
+        raise RuntimeError("Clipboard copy needs pywin32 on Windows.") from exc
+
+    rgb = image.convert("RGB")
+    bitmap = io.BytesIO()
+    rgb.save(bitmap, "BMP")
+    dib = bitmap.getvalue()[14:]
+    bitmap.close()
+
+    png = io.BytesIO()
+    image.save(png, "PNG")
+    png_data = png.getvalue()
+    png.close()
+
+    png_format = win32clipboard.RegisterClipboardFormat("PNG")
+    win32clipboard.OpenClipboard()
+    try:
+        win32clipboard.EmptyClipboard()
+        win32clipboard.SetClipboardData(win32clipboard.CF_DIB, dib)
+        win32clipboard.SetClipboardData(png_format, png_data)
+    finally:
+        win32clipboard.CloseClipboard()
+
+
 def copy_image_to_linux_clipboard(image: Image.Image) -> None:
     """Copy an image to the Linux clipboard using common desktop tools."""
     if not IS_LINUX:

@@ -1,15 +1,17 @@
 # Media Downloader
 
- A complete desktop app for your entire media workflow download and queue files, convert media, remove backgrounds, capture screenshots, and record your screen all in one place.
+A complete desktop app for your entire media workflow — download and queue files, convert media, remove backgrounds, capture screenshots, and record your screen, all in one place.
 
 <p align="center">
-  <strong>Free · MIT licensed · No account · No ads · Offline-first</strong>
+  <strong>Free · MIT licensed · No account · No ads · Offline-first · v3.0.0</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/needyamin/media-downloader/releases"><strong>Download latest release</strong></a>
   &nbsp;|&nbsp;
-  <a href="index.html">Landing page</a>
+  <a href="https://apps.microsoft.com/detail/9PHDQLBB8QCK">Microsoft Store</a>
+  &nbsp;|&nbsp;
+  <a href="privacy.html">Privacy</a>
 </p>
 
 ---
@@ -27,7 +29,7 @@ Media Downloader combines core media tools and a desktop assistant into one work
 - AI background removal
 - Screenshot capture
 - Screen recording
-- **Anika** — optional desktop assistant (break reminders, spell book, timer, personality & effects)
+- **Anika** — optional desktop assistant (break reminders, Today tasks, Workday timer)
 
 It is built for Windows and Linux, with one shared UI hub, tray actions, and keyboard shortcuts.
 
@@ -42,6 +44,7 @@ It is built for Windows and Linux, with one shared UI hub, tray actions, and key
 - Screenshot and recording overlays with quick controls
 - **Anika** desktop assistant from **Tools → Anika** (separate process; no duplicate tray icon when launched from the hub)
 - Packaged apps **auto-update** from GitHub Releases (Windows installer); releases ship **compiled binaries only** (no source zip)
+- Microsoft Store package via MSIX (`MediaDownloader.msix`)
 - Configurable behavior via `app_flags.json`
 
 ---
@@ -56,17 +59,18 @@ It is built for Windows and Linux, with one shared UI hub, tray actions, and key
 | BG Remover | Remove image backgrounds and export PNG |
 | YScreenshot | Capture selected or full screen image |
 | YScreenRecorder | Record screen with pause/finish controls |
-| Anika | Desktop assistant — break reminders, to-do spell book, chaa timer, assistant settings |
+| Anika | Desktop assistant — break reminders, Today tasks, Workday timer |
 
 ### Anika (desktop assistant)
 
-Open from **Tools → Anika** or **`Ctrl+Shift+U`**. Anika runs in a separate process. If she is already running, another click brings her window to the front.
+Open from **Tools → Anika** or **`Ctrl+Shift+A`**. Anika runs in a separate process. If she is already running, another click brings her window to the front.
 
 Highlights:
 
 - Break reminders (interval + how long she stays on screen)
 - Drag to a **screen edge** to hide her for a configurable time (default 5 minutes)
-- Right-click menu and **Settings → Actions** for spell book, timer, force actions, and quit
+- Right-click **Today** for the day's tasks (slots + optional AM/PM time)
+- Right-click **Workday** for focus blocks and a timer that keeps running after you close the window
 - Assistant size, opacity, language, personality, and visual effects
 - Settings stored in `%LOCALAPPDATA%\Media Downloader\` (Anika: `anika\`, BG remover models: `rembg_models\`, ffmpeg, updates). Legacy folders `.yamos_witch_mate` and `.u2net` are migrated automatically and removed on uninstall.
 
@@ -76,8 +80,8 @@ Highlights:
 
 ### Windows
 
-1. Download `MediaDownloader_Setup.exe` from [Releases](https://github.com/needyamin/media-downloader/releases)
-2. Run installer
+1. Download `MediaDownloader_Setup.exe` from [Releases](https://github.com/needyamin/media-downloader/releases), or install from the [Microsoft Store](https://apps.microsoft.com/detail/9PHDQLBB8QCK)
+2. Run the installer (or open the Store listing)
 3. Launch Media Downloader
 
 ### Linux
@@ -124,7 +128,7 @@ export PYTHONPATH=src
 | `Ctrl+Shift+B` | Open BG Remover |
 | `Ctrl+Shift+Y` | Open YScreenshot |
 | `Ctrl+Shift+R` | Open YScreenRecorder |
-| `Ctrl+Shift+U` | Open Anika |
+| `Ctrl+Shift+A` | Open Anika |
 
 While recording:
 
@@ -165,34 +169,51 @@ python -m desktop_tools.app.build_tools.manifest
 
 | Platform | Output |
 |---|---|
-| Windows | `release/windows/MediaDownloader_Setup.exe` |
+| Windows installer | `release/windows/MediaDownloader_Setup.exe` |
+| Windows Store / sideload | `release/windows/MediaDownloader.msix` |
 | Linux | `release/linux/Media-Downloader-x86_64.AppImage` |
 
-### Windows (Nuitka + Inno Setup)
+Current app version is **3.0.0** (`versions.media_downloader` in `app_flags.json`).
+
+### Windows (PyInstaller + Inno Setup)
+
+Default path: **PyInstaller onedir** (fast compile) then Inno Setup. The installed app keeps DLLs and assets beside the exe, so it should not unpack or hang on every launch.
 
 From the **repo root** in PowerShell:
 
 ```powershell
-cd C:\Users\needy\Desktop\media-downloader
 $env:PYTHONPATH = "src"
-pip install -r src\desktop_tools\app\requirements.txt nuitka ordered-set zstandard
-python -m desktop_tools.app.build_tools.nuitka
+pip install -r src\desktop_tools\app\requirements.txt
+python -m desktop_tools.app.build_tools.pyinstaller
 ```
+
+That writes `release/windows/media_download.dist/` (`Media-Downloader.exe` + `_internal` + `Anika.exe`) and then `release/windows/MediaDownloader_Setup.exe`.
 
 **Requirements**
 
 - Windows only (the script exits on Linux/macOS)
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) installed (`ISCC.exe` on PATH or default install location)
-- Python **3.12 or 3.13** recommended for Nuitka (on 3.14+, the script tries `py -3.13` when available)
+- Python 3.12+ (3.12 or 3.13 recommended)
 
-**Legacy script paths** (still work from repo root; they forward to the same build):
+### Windows MSIX (Microsoft Store / sideload)
+
+After a Windows exe build exists:
 
 ```powershell
-python src\desktop_tools\app\nutika_build.py
-python src\desktop_tools\app\nuitka_build.py
+$env:PYTHONPATH = "src"
+python -m desktop_tools.app.build_tools.msix
 ```
 
-The old file `src\desktop_tools\app\nutika_build.py` was moved to `src\desktop_tools\app\build_tools\nuitka_build.py`; the shims above avoid “file not found” errors.
+Output: `release/windows/MediaDownloader.msix` plus `release/windows/store_listing.json`.
+
+Store identity is set in the MSIX build:
+
+- Name: `ANSNEWTECH.AnsNewTech.MediaDownloader4K`
+- Publisher: `CN=087A9974-75CB-44FC-B893-8D3999E5E5E5`
+- Store ID: `9PHDQLBB8QCK`
+- Store URL: https://apps.microsoft.com/detail/9PHDQLBB8QCK
+
+Upload `release/windows/MediaDownloader.msix` on the Packages tab if the submission accepts MSIX. If the listing type is **EXE or MSI**, upload `MediaDownloader_Setup.exe` instead. Host `privacy.html` so the privacy URL is live.
 
 ### Linux (AppImage)
 
@@ -206,15 +227,13 @@ python -m desktop_tools.app.build_tools.linux_appimage
 
 Pushing a version tag builds **compiled** Windows and Linux artifacts only — no Python source is attached to the release.
 
-1. Tag and push: `git tag v2.0.1` then `git push origin v2.0.1`
-2. GitHub Actions (`.github/workflows/release.yml`) runs Nuitka + Inno Setup (Windows) and PyInstaller + AppImage (Linux), then publishes a GitHub Release with `MediaDownloader_Setup.exe`, `Media-Downloader-x86_64.AppImage`, and `SHA256SUMS.txt`.
+1. Tag and push: `git tag v3.0.0` then `git push origin v3.0.0`
+2. GitHub Actions (`.github/workflows/release.yml`) runs PyInstaller + Inno Setup (Windows) and PyInstaller + AppImage (Linux), then publishes a GitHub Release with `MediaDownloader_Setup.exe`, `Media-Downloader-x86_64.AppImage`, and `SHA256SUMS.txt`.
 3. Installed apps compare their bundled version (`app_flags.json`) to [releases/latest](https://github.com/needyamin/media-downloader/releases/latest) and silently install a newer `MediaDownloader_Setup.exe` when available (`updates.packaged_auto_update` in `app_flags.json`).
 
-Manual CI run: **Actions → Release (Nuitka + AppImage) → Run workflow** and enter a version like `2.0.1`.
+Manual CI run: **Actions → Release (PyInstaller + AppImage) → Run workflow** and enter a version like `3.0.0`.
 
-**Local Windows build tip:** use Python **3.12 or 3.13** for Nuitka. On Python 3.14+, the build script tries `py -3.13` / `py -3.12` automatically; if that is unavailable it continues with `--jobs=1` (slower but avoids Scons `__constants.h` races on Anika).
-
-If the hub exe already built and only Anika/Inno failed, re-run the full build command — it reuses the standalone dist when possible.
+If the hub exe already built and only Anika/Inno failed, re-run with `$env:MD_INSTALLER_ONLY='1'` or just run the same command again — it reuses the onedir dist when possible.
 
 WSL Linux build from Windows:
 
@@ -236,7 +255,7 @@ Common keys:
 - `disabled_domains`
 - `clipboard_poll_ms_*`
 - `max_log_lines`
-- `hotkeys.*` (including `anika`: `Ctrl+Shift+U`)
+- `hotkeys.*` (including `anika`: `Ctrl+Shift+A`)
 - `versions.*`
 - `paths.*`
 - `themes.*`
@@ -251,9 +270,10 @@ Anika-specific settings (break timing, edge hide, assistant size, etc.) live und
 ```text
 media-downloader/
 ├── README.md
-├── index.html
+├── privacy.html
 ├── app_flags.json
 ├── run.py
+├── scripts/           # Local helper scripts (signing, blogger theme)
 └── src/desktop_tools/
     ├── app/           # Hub UI, tool windows, build tools, services
     ├── anika/         # Desktop assistant (Anika process, assets, settings GUI)
@@ -272,7 +292,7 @@ See [src/desktop_tools/README.md](src/desktop_tools/README.md) for launcher conv
 - `yt-dlp`, Pillow, `pystray`, `customtkinter`
 - `rembg`, `onnxruntime`
 - Anika: Tkinter + CustomTkinter desktop assistant
-- Packaging: Nuitka + Inno Setup (Windows), PyInstaller + AppImage flow (Linux)
+- Packaging: PyInstaller onedir + Inno Setup (Windows installer), MSIX (Microsoft Store), PyInstaller + AppImage (Linux)
 
 ---
 
@@ -280,6 +300,8 @@ See [src/desktop_tools/README.md](src/desktop_tools/README.md) for launcher conv
 
 Educational and personal use only.  
 Users are responsible for compliance with copyright law, platform terms, and local regulations.
+
+See [privacy.html](privacy.html) for what the app stores on your PC.
 
 ---
 

@@ -13,16 +13,15 @@ src/desktop_tools/
 │   ├── hub/                       # Hub-level UI actions
 │   ├── platform/                  # Platform integration constants/helpers
 │   ├── services/                  # Service-layer orchestration helpers
-│   ├── ui/                        # Tool UIs + centralized UI launchers
+│   ├── ui/                        # Tool UIs + centralized UI entrypoints
 │   │   ├── converter_app.py
 │   │   ├── background_remover_app.py
 │   │   ├── screenshot_app.py
 │   │   ├── yscreenrecorder_app.py
-│   │   └── launchers.py
+│   │   └── entrypoints.py
 │   ├── build_tools/               # Build scripts and module entrypoints
 │   ├── assets/                    # Icons and images
-│   ├── docs/                      # Tool-specific docs
-│   └── installer/                 # Windows installer script
+│   └── installer/                 # Windows Inno Setup + MSIX Store package
 ├── shared/                        # Reusable non-UI services (ffmpeg, capture, downloads)
 └── tools/                         # Stable, import-friendly launch/entrypoint API
     └── media_downloader/

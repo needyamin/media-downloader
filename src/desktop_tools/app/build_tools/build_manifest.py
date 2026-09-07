@@ -1,4 +1,4 @@
-"""Shared packaging manifest for Windows (Nuitka) and Linux (PyInstaller) builds."""
+"""Shared packaging manifest for Windows and Linux PyInstaller builds."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ ANIKA_MAIN_SCRIPT = ANIKA_DIR / "main.py"
 ANIKA_RESOURCES_DIR = ANIKA_DIR / "resources"
 ANIKA_APP_DIR = ANIKA_DIR / "app"
 ANIKA_OUTPUT_EXE_WIN = "Anika.exe"
-ANIKA_OUTPUT_EXE_LINUX = "Anika"
 ANIKA_REQUIRED_ASSETS = frozenset(
     {
         "idle.png",
@@ -48,9 +47,9 @@ INNO_SCRIPT = APP_DIR / "installer" / "setup.iss"
 # App entry scripts that are build tooling, not bundled application code.
 BUILD_SCRIPT_STEMS = frozenset(
     {
-        "nutika_build",
-        "nuitka_build",
+        "pyinstaller_build",
         "linux_appimage_build",
+        "msix_build",
         "build_manifest",
         "__init__",
     }
@@ -317,33 +316,8 @@ def print_bundle_summary() -> None:
         print(f"    - anika/{relative.as_posix()}")
 
 
-def anika_nuitka_data_arguments() -> list[str]:
-    """Data files embedded in the standalone Anika desktop assistant binary."""
-    args: list[str] = []
-    if ANIKA_RESOURCES_DIR.is_dir():
-        args.append(f"--include-data-dir={ANIKA_RESOURCES_DIR}=resources")
-    return args
-
-
-def nuitka_data_file_arguments() -> list[str]:
-    """Build Nuitka --include-data-* arguments for flags, assets, and root-level fallbacks."""
-    args: list[str] = [
-        f"--include-data-dir={ASSETS_DIR}=assets",
-        f"--include-data-files={APP_FLAGS_PATH}=app_flags.json",
-    ]
-    if ANIKA_DIR.is_dir():
-        args.append(f"--include-data-dir={ANIKA_DIR}=desktop_tools/anika")
-
-    # Top-level copies support get_asset_path() and get_project_root() bundle fallbacks.
-    for asset_path in discover_asset_files():
-        if asset_path.parent == ASSETS_DIR:
-            args.append(f"--include-data-files={asset_path}={asset_path.name}")
-
-    return _dedupe_preserve_order(args)
-
-
 def linux_pyinstaller_data_arguments(os_pathsep: str) -> list[str]:
-    """Build PyInstaller --add-data arguments mirroring the Nuitka bundle layout."""
+    """Build PyInstaller --add-data arguments for flags, assets, and Anika."""
     args: list[str] = [
         f"--add-data={ASSETS_DIR}{os_pathsep}assets",
         f"--add-data={APP_FLAGS_PATH}{os_pathsep}.",

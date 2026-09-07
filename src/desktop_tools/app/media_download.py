@@ -8,7 +8,7 @@ import webbrowser
 import pyperclip
 import pystray
 from pystray import MenuItem as item
-from PIL import Image, ImageTk, ImageSequence, ImageDraw
+from PIL import Image, ImageTk, ImageDraw
 import sys
 import ctypes
 from ctypes import wintypes
@@ -21,11 +21,8 @@ import queue
 import shutil
 import requests
 import json
-import zipfile
 import subprocess
 import time
-import ssl
-import certifi
 import io
 import traceback
 from datetime import datetime
@@ -74,7 +71,6 @@ try:
     from desktop_tools.app.services.url_policy import get_blocked_domain
     from desktop_tools.app.config.runtime_flags import (
         APP_FLAGS,
-        APP_FLAGS_PATH,
         APP_VERSION_MAIN,
         CLIPBOARD_POLL_MS_ACTIVE,
         CLIPBOARD_POLL_MS_BACKGROUND,
@@ -87,19 +83,24 @@ try:
         PROGRESS_UI_MIN_INTERVAL_MS,
         UI_QUEUE_POLL_MS,
         get_tool_theme,
-        get_disabled_domain_match as _get_disabled_domain_match,
         normalize_domain_name,
     )
     from desktop_tools.shared.ffmpeg import (
+        FFMPEG_DOWNLOAD_PAGE,
+        FFMPEG_WINGET_PACKAGE,
+        clear_custom_ffmpeg_paths,
         download_managed_ffmpeg,
-        ensure_managed_ffmpeg,
         find_existing_ffmpeg,
-        get_managed_ffmpeg_paths,
+        get_custom_ffmpeg_paths,
+        get_ffmpeg_install_help,
+        get_ffmpeg_version_line,
+        install_ffmpeg_with_winget,
+        set_custom_ffmpeg_paths,
         update_managed_ffmpeg_if_needed,
-        verify_ffmpeg_binaries,
     )
-    from desktop_tools.shared.direct_download import DirectDownloadError, DirectDownloadTask
+    from desktop_tools.shared.direct_download import DirectDownloadError
     from desktop_tools.shared.direct_download_manager import DirectDownloadManager
+    from desktop_tools.shared.dependency_progress import DependencyProgressPanel, parse_progress_percent
 except Exception:
     WM_HOTKEY = 0x0312
     WM_QUIT = 0x0012
@@ -125,7 +126,7 @@ except Exception:
     ANIKA_HOTKEY_ID = 0x5955
     ANIKA_HOTKEY_MODIFIERS = MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT
     ANIKA_HOTKEY_VK = ord("U")
-    ANIKA_HOTKEY_LABEL = "Ctrl+Shift+U"
+    ANIKA_HOTKEY_LABEL = "Ctrl+Shift+A"
 
     def apply_window_icon(window, app_id="needyamin.media_downloader"):
         return APP_DIR / "assets" / "needyamin.ico"
@@ -146,26 +147,6 @@ except Exception:
 
     class DirectDownloadError(Exception):
         pass
-
-    class DirectDownloadTask:
-        def __init__(self, *args, **kwargs):
-            self.state = "error"
-            self.error_message = "Direct download module is unavailable."
-
-        def is_busy(self):
-            return False
-
-        def start(self):
-            raise DirectDownloadError("Direct download module is unavailable.")
-
-        def pause(self):
-            return None
-
-        def resume(self):
-            return False
-
-        def cancel(self):
-            return None
 
     class DirectDownloadManager:
         def __init__(self, *args, **kwargs):
@@ -207,29 +188,64 @@ except Exception:
         def start_next_download(self):
             return False
 
-    def verify_ffmpeg_binaries(ffmpeg_path, ffprobe_path, logger=None):
-        return False
-
-    def ensure_managed_ffmpeg(extra_paths=None, logger=None, progress_callback=None):
-        return None, None
-
-    def find_existing_ffmpeg(extra_paths=None, logger=None):
-        return None, None
-
-    def get_managed_ffmpeg_paths():
-        return APP_DIR / "ffmpeg" / "ffmpeg.exe", APP_DIR / "ffmpeg" / "ffprobe.exe"
-
     def download_managed_ffmpeg(logger=None, progress_callback=None):
         return None, None
 
     def update_managed_ffmpeg_if_needed(logger=None, progress_callback=None, force=False, extra_paths=None):
         return None, None, False
 
-    APP_FLAGS_PATH = get_project_root() / "app_flags.json"
+    def find_existing_ffmpeg(extra_paths=None, logger=None):
+        return None, None
+
+    def get_custom_ffmpeg_paths():
+        return None, None
+
+    def set_custom_ffmpeg_paths(ffmpeg_path, ffprobe_path=None):
+        raise RuntimeError("FFmpeg path settings are unavailable.")
+
+    def clear_custom_ffmpeg_paths():
+        return None
+
+    def get_ffmpeg_install_help():
+        return (
+            "Install FFmpeg if needed:\n\n"
+            "    Windows: winget install Gyan.FFmpeg\n"
+            "    Or download from https://ffmpeg.org and add bin to PATH"
+        )
+
+    def get_ffmpeg_version_line(ffmpeg_path):
+        return ""
+
+    def install_ffmpeg_with_winget(logger=None):
+        raise RuntimeError(get_ffmpeg_install_help())
+
+    class DependencyProgressPanel:
+        def __init__(self, *args, **kwargs):
+            self.frame = None
+            self.visible = False
+
+        def show(self, *args, **kwargs):
+            return None
+
+        def update(self, *args, **kwargs):
+            return None
+
+        def hide(self):
+            return None
+
+        def threadsafe_callback(self, *args, **kwargs):
+            return lambda *cb_args, **cb_kwargs: None
+
+    def parse_progress_percent(message=None, percent=None):
+        return percent
+
+    FFMPEG_WINGET_PACKAGE = "Gyan.FFmpeg"
+    FFMPEG_DOWNLOAD_PAGE = "https://ffmpeg.org/download.html"
+
     APP_FLAGS = {}
-    APP_VERSION_MAIN = "2.0.0"
+    APP_VERSION_MAIN = "3.0.0"
     DEBUG_MODE = False
-    DOWNLOAD_ROOT_DIRNAME = "Yamin Downloader"
+    DOWNLOAD_ROOT_DIRNAME = "AnsNewTech Downloads"
     UI_QUEUE_POLL_MS = 150
     CLIPBOARD_POLL_MS_ACTIVE = 1200
     CLIPBOARD_POLL_MS_BACKGROUND = 2500
@@ -438,6 +454,14 @@ loading_label = None
 about_window = None
 debug_update_window = None
 error_dialog_window = None
+_update_system_state = {
+    "release_info": None,
+    "auto_apply": False,
+    "checking": False,
+    "applying": False,
+}
+_update_system_progress = None
+_pending_update_installer = None
 
 def default_app_settings():
     """Return default application settings."""
@@ -468,9 +492,12 @@ def sanitize_max_files(value):
 def normalize_download_root(path_value):
     """Return a valid download root path."""
     try:
-        return Path(path_value).expanduser() if path_value else DEFAULT_DOWNLOADS_PATH
+        path = Path(path_value).expanduser() if path_value else DEFAULT_DOWNLOADS_PATH
     except Exception:
         return DEFAULT_DOWNLOADS_PATH
+    if path.name == "Yamin Downloader":
+        return path.parent / DOWNLOAD_ROOT_DIRNAME
+    return path
 
 def load_app_settings():
     """Load persisted settings from disk."""
@@ -484,7 +511,15 @@ def load_app_settings():
     except Exception as e:
         print(f"Error loading settings: {e}")
 
+    previous_root = str(settings.get('download_root') or '')
     settings['download_root'] = str(normalize_download_root(settings.get('download_root')))
+    if previous_root and previous_root != settings['download_root']:
+        try:
+            SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(SETTINGS_FILE, 'w', encoding='utf-8') as settings_file:
+                json.dump(settings, settings_file, indent=2)
+        except Exception:
+            pass
     settings['video_quality'] = settings.get('video_quality') if settings.get('video_quality') in VALID_VIDEO_QUALITIES else 'best'
     settings['audio_quality'] = settings.get('audio_quality') if settings.get('audio_quality') in VALID_AUDIO_QUALITIES else '320'
     settings['format'] = settings.get('format') if settings.get('format') in VALID_FORMATS else 'mp4'
@@ -509,29 +544,14 @@ quality_settings = {
     'format': app_settings['format']                 # mp4, webm, mkv
 }
 
-def verify_ffmpeg(ffmpeg_path, ffprobe_path):
-    """Verify that FFmpeg and FFprobe are working."""
-    try:
-        print(f"\n=== FFMPEG VERIFICATION ===")
-        print(f"FFmpeg path: {ffmpeg_path}")
-        print(f"FFprobe path: {ffprobe_path}")
-        is_valid = verify_ffmpeg_binaries(ffmpeg_path, ffprobe_path, logger=ffmpeg_log)
-        if not is_valid:
-            ffmpeg_log(f"FFmpeg verification failed for: {ffmpeg_path}")
-        return is_valid
-    except Exception as e:
-        log(f"Error verifying FFmpeg: {str(e)}")
-        print(f"Exception during FFmpeg verification: {str(e)}")
-        print(traceback.format_exc())
-        return False
-
 def download_ffmpeg():
     """Download and install FFmpeg."""
     message_label = None
     try:
+        begin_dep_job("ffmpeg", "FFmpeg download / update", "Downloading FFmpeg...", indeterminate=True)
         message_label = show_loading("Downloading FFmpeg...")
-        def update_status(message):
-            ffmpeg_log(message)
+        def update_status(message, percent=None):
+            ffmpeg_download_progress(message, percent)
             if message_label:
                 try:
                     message_label.config(text=message)
@@ -545,9 +565,8 @@ def download_ffmpeg():
 
         ffmpeg_log("All FFmpeg download attempts failed.")
         messagebox.showerror(
-            "Error",
-            "Failed to download FFmpeg. You may need to install it manually.\n"
-            "Please visit: https://ffmpeg.org/download.html",
+            "FFmpeg Required",
+            "FFmpeg could not be installed automatically.\n\n" + get_ffmpeg_install_help(),
         )
         return None
             
@@ -555,6 +574,7 @@ def download_ffmpeg():
         log(f"Error downloading FFmpeg: {str(e)}")
         return None
     finally:
+        end_dep_job("ffmpeg")
         if message_label:
             hide_loading(message_label)
 
@@ -693,7 +713,7 @@ def toggle_auto_start():
         auto_start_enabled = is_auto_start_enabled()
 
 def is_packaged_runtime():
-    """Return True when running as a packaged Windows executable (PyInstaller or Nuitka)."""
+    """Return True when running as a packaged Windows executable (PyInstaller)."""
     executable_name = Path(sys.executable).name.lower()
     if not IS_WINDOWS or executable_name in {'python.exe', 'pythonw.exe'}:
         return False
@@ -730,8 +750,9 @@ def get_preferred_update_asset(release, require_installer=False):
     return exe_assets[0] if exe_assets else None
 
 def close_debug_update_window():
-    """Close the custom update debug dialog."""
-    global debug_update_window
+    """Close the Update System window."""
+    global debug_update_window, _update_system_progress
+    _update_system_progress = None
     if debug_update_window and debug_update_window.winfo_exists():
         debug_update_window.destroy()
     debug_update_window = None
@@ -1164,286 +1185,206 @@ def validate_main_download_url():
         return None
     return url
 
-def show_debug_update_window(debug_data, report_text):
-    """Show a richer UI for update diagnostics."""
-    global debug_update_window
+def _last_update_check_label():
+    try:
+        if UPDATE_CHECK_FILE.exists():
+            last_check = float(UPDATE_CHECK_FILE.read_text(encoding="utf-8").strip())
+            return time.ctime(last_check)
+    except Exception:
+        pass
+    return "Not checked yet"
 
-    if debug_update_window and debug_update_window.winfo_exists():
-        debug_update_window.destroy()
 
-    debug_update_window = tk.Toplevel(root)
-    debug_update_window.title("Update System")
-    debug_update_window.geometry("760x560")
-    debug_update_window.minsize(700, 500)
-    debug_update_window.configure(bg=THEME['bg'])
-    debug_update_window.transient(root)
-    debug_update_window.protocol("WM_DELETE_WINDOW", close_debug_update_window)
-    apply_window_icon(debug_update_window, app_id="needyamin.media_downloader")
+def _update_system_widgets():
+    window = debug_update_window
+    if window is None or not window.winfo_exists():
+        return None
+    return getattr(window, "_update_widgets", None)
 
-    outer = tk.Frame(debug_update_window, bg=THEME['bg'])
-    outer.pack(fill='both', expand=True, padx=20, pady=20)
 
-    header = tk.Frame(outer, bg=THEME['bg'])
-    header.pack(fill='x', pady=(0, 14))
+def refresh_update_system_ui(info=None, status=None, apply_enabled=None):
+    """Refresh the Update System window from any thread."""
+    info = info if info is not None else _update_system_state.get("release_info")
 
+    def apply():
+        widgets = _update_system_widgets()
+        if widgets is None:
+            return
+        widgets["current"].set(f"v{CURRENT_VERSION}")
+        widgets["runtime"].set("Installed app" if is_packaged_runtime() else "Source (python run.py)")
+        widgets["last_check"].set(_last_update_check_label())
+        if info:
+            widgets["latest"].set(f"v{info.get('latest_version') or '—'}")
+            if info.get("ok"):
+                if info.get("is_newer"):
+                    widgets["status"].set(f"New version {info.get('latest_version')} is available.")
+                    widgets["status_color"](THEME.get("success") or "#16A34A")
+                else:
+                    widgets["status"].set("You already have the latest version.")
+                    widgets["status_color"](THEME.get("primary"))
+            else:
+                widgets["status"].set(info.get("error") or "Could not check for updates.")
+                widgets["status_color"](THEME.get("error"))
+            widgets["note"].set(info.get("comparison") or info.get("error") or "")
+        if status:
+            widgets["status"].set(status)
+        if apply_enabled is not None:
+            widgets["apply_btn"].configure(state="normal" if apply_enabled else "disabled")
+
+    if "_run_on_ui" in globals():
+        _run_on_ui(apply)
+    elif threading.current_thread() is threading.main_thread():
+        apply()
+    elif "ui_queue" in globals():
+        ui_queue.put(apply)
+
+
+def open_update_system(start_check=True, auto_apply=False):
+    """Open the live updater window without blocking the main UI."""
+    global debug_update_window, _update_system_progress
+
+    _update_system_state["auto_apply"] = bool(auto_apply)
+
+    if debug_update_window is not None and debug_update_window.winfo_exists():
+        debug_update_window.lift()
+        debug_update_window.focus_force()
+        if start_check:
+            start_app_update_check(user_initiated=True)
+        return debug_update_window
+
+    win = tk.Toplevel(root)
+    debug_update_window = win
+    win.title("Update System")
+    win.geometry("520x420")
+    win.minsize(480, 380)
+    win.configure(bg=THEME["bg"])
+    win.transient(root)
+    win.protocol("WM_DELETE_WINDOW", close_debug_update_window)
+    apply_window_icon(win, app_id="needyamin.media_downloader")
+
+    outer = tk.Frame(win, bg=THEME["bg"])
+    outer.pack(fill="both", expand=True, padx=18, pady=16)
+
+    tk.Label(outer, text="Update System", font=("Segoe UI", 18, "bold"), bg=THEME["bg"], fg=THEME["fg"]).pack(anchor="w")
     tk.Label(
-        header,
-        text="Update System",
-        font=('Segoe UI', 20, 'bold'),
-        bg=THEME['bg'],
-        fg=THEME['primary']
-    ).pack(anchor='w')
-
-    tk.Label(
-        header,
-        text="Inspect the current updater runtime, release status, and selected installer behavior.",
-        font=('Segoe UI', 10),
-        bg=THEME['bg'],
-        fg=THEME['gray']
-    ).pack(anchor='w', pady=(4, 0))
-
-    summary_card = tk.Frame(
         outer,
-        bg=THEME['light_gray'],
-        bd=0,
-        relief='flat',
-        highlightthickness=1,
-        highlightbackground=THEME['border'],
-        highlightcolor=THEME['border'],
+        text="Checks GitHub in the background. The app stays usable while an update downloads.",
+        font=("Segoe UI", 9),
+        bg=THEME["bg"],
+        fg=THEME["gray"],
+        wraplength=470,
+        justify="left",
+    ).pack(anchor="w", pady=(4, 12))
+
+    card = tk.Frame(outer, bg=THEME["light_gray"], highlightthickness=1, highlightbackground=THEME["border"])
+    card.pack(fill="x")
+    current_var = tk.StringVar(value=f"v{CURRENT_VERSION}")
+    latest_var = tk.StringVar(value="Checking…")
+    runtime_var = tk.StringVar(value="Installed app" if is_packaged_runtime() else "Source (python run.py)")
+    last_check_var = tk.StringVar(value=_last_update_check_label())
+    status_var = tk.StringVar(value="Checking for updates…")
+    note_var = tk.StringVar(value="")
+
+    rows = (
+        ("Current version", current_var),
+        ("Latest version", latest_var),
+        ("Runtime", runtime_var),
+        ("Last check", last_check_var),
     )
-    summary_card.pack(fill='x', pady=(0, 14))
-    summary_card.grid_columnconfigure(1, weight=1)
-    summary_card.grid_columnconfigure(3, weight=1)
-
-    summary_rows = [
-        ("Current Version", debug_data.get('current_version', 'Unknown')),
-        ("Runtime Mode", debug_data.get('runtime_mode', 'Unknown')),
-        ("API Status", debug_data.get('api_status', 'Unknown')),
-        ("Latest Release", debug_data.get('latest_release', 'Unknown')),
-        ("Preferred Asset", debug_data.get('preferred_asset', 'Unknown')),
-        ("Installer Asset", debug_data.get('installer_asset', 'Unknown')),
-        ("Update Mode", debug_data.get('update_mode', 'Unknown')),
-        ("Last Check", debug_data.get('last_check', 'Not found')),
-    ]
-
-    for index, (label, value) in enumerate(summary_rows):
-        row = index // 2
-        column = (index % 2) * 2
-        tk.Label(
-            summary_card,
-            text=f"{label}:",
-            font=('Segoe UI', 10, 'bold'),
-            bg=THEME['light_gray'],
-            fg=THEME['fg'],
-            anchor='w'
-        ).grid(row=row, column=column, sticky='w', padx=(16, 8), pady=8)
-
-        tk.Label(
-            summary_card,
-            text=value,
-            font=('Segoe UI', 10),
-            bg=THEME['light_gray'],
-            fg=THEME['fg'],
-            anchor='w',
-            justify='left',
-            wraplength=250
-        ).grid(row=row, column=column + 1, sticky='ew', padx=(0, 16), pady=8)
-
-    if debug_data.get('release_url'):
-        release_link = tk.Label(
-            outer,
-            text=debug_data['release_url'],
-            font=('Segoe UI', 10),
-            bg=THEME['bg'],
-            fg=THEME['primary'],
-            cursor='hand2',
-            anchor='w',
+    for index, (label, variable) in enumerate(rows):
+        tk.Label(card, text=label, font=("Segoe UI", 9, "bold"), bg=THEME["light_gray"], fg=THEME["fg"]).grid(
+            row=index, column=0, sticky="w", padx=14, pady=(10 if index == 0 else 4, 4)
         )
-        release_link.pack(fill='x', pady=(0, 10))
-        release_link.bind('<Button-1>', lambda _event: webbrowser.open(debug_data['release_url']))
+        tk.Label(card, textvariable=variable, font=("Segoe UI", 9), bg=THEME["light_gray"], fg=THEME["fg"]).grid(
+            row=index, column=1, sticky="w", padx=(8, 14), pady=(10 if index == 0 else 4, 4)
+        )
+    card.grid_columnconfigure(1, weight=1)
 
-    report_card = tk.Frame(
+    status_label_widget = tk.Label(
         outer,
-        bg='white',
-        bd=0,
-        relief='flat',
-        highlightthickness=1,
-        highlightbackground=THEME['border'],
-        highlightcolor=THEME['border'],
+        textvariable=status_var,
+        font=("Segoe UI", 10, "bold"),
+        bg=THEME["bg"],
+        fg=THEME["primary"],
+        wraplength=470,
+        justify="left",
     )
-    report_card.pack(fill='both', expand=True)
-    report_card.grid_rowconfigure(1, weight=1)
-    report_card.grid_columnconfigure(0, weight=1)
+    status_label_widget.pack(anchor="w", pady=(14, 2))
+    tk.Label(outer, textvariable=note_var, font=("Segoe UI", 9), bg=THEME["bg"], fg=THEME["gray"], wraplength=470, justify="left").pack(anchor="w")
 
-    tk.Label(
-        report_card,
-        text="Detailed Report",
-        font=('Segoe UI', 12, 'bold'),
-        bg='white',
-        fg=THEME['fg']
-    ).grid(row=0, column=0, sticky='w', padx=16, pady=(14, 8))
-
-    report_text_widget = tk.Text(
-        report_card,
-        wrap='word',
-        font=('Consolas', 10),
-        bg=THEME['light_gray'],
-        fg=THEME['fg'],
-        relief='flat',
-        padx=12,
-        pady=12
+    _update_system_progress = DependencyProgressPanel(
+        outer,
+        background=THEME["bg"],
+        foreground=THEME["fg"],
+        muted=THEME["gray"],
+        bar_style="Modern.Horizontal.TProgressbar",
+        wraplength=470,
+        use_ttk=False,
+        layout="pack",
+        layout_kwargs={"fill": "x", "pady": (12, 0)},
     )
-    report_text_widget.grid(row=1, column=0, sticky='nsew', padx=(12, 0), pady=(0, 12))
 
-    report_scroll = ttk.Scrollbar(report_card, orient='vertical', command=report_text_widget.yview)
-    report_scroll.grid(row=1, column=1, sticky='ns', padx=(0, 12), pady=(0, 12))
-    report_text_widget.configure(yscrollcommand=report_scroll.set)
-    report_text_widget.insert('1.0', report_text)
-    report_text_widget.config(state='disabled')
+    button_row = tk.Frame(outer, bg=THEME["bg"])
+    button_row.pack(fill="x", pady=(16, 0))
 
-    button_row = tk.Frame(outer, bg=THEME['bg'])
-    button_row.pack(fill='x', pady=(14, 0))
-
-    tk.Button(
-        button_row,
-        text="Copy Report",
-        bg=THEME['primary'],
-        fg='white',
-        activebackground=THEME['secondary'],
-        activeforeground='white',
-        relief='flat',
-        cursor='hand2',
-        padx=16,
-        pady=7,
-        command=lambda: copy_debug_report(report_text)
-    ).pack(side='left')
-
-    if debug_data.get('release_url'):
-        tk.Button(
-            button_row,
-            text="Open Release Page",
-            bg=THEME['light_gray'],
-            fg=THEME['fg'],
-            activebackground=THEME['border'],
-            activeforeground=THEME['fg'],
-            relief='flat',
-            cursor='hand2',
-            padx=16,
+    def _small_btn(parent, text, command, *, primary=False):
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            font=("Segoe UI", 9, "bold" if primary else "normal"),
+            bg=THEME["primary"] if primary else THEME["light_gray"],
+            fg="#ffffff" if primary else THEME["fg"],
+            activebackground=THEME["secondary"] if primary else THEME["border"],
+            activeforeground="#ffffff" if primary else THEME["fg"],
+            relief="flat",
+            cursor="hand2",
+            padx=12,
             pady=7,
-            command=lambda: webbrowser.open(debug_data['release_url'])
-        ).pack(side='left', padx=(10, 0))
+        )
 
-    tk.Button(
-        button_row,
-        text="Close",
-        bg=THEME['light_gray'],
-        fg=THEME['fg'],
-        activebackground=THEME['border'],
-        activeforeground=THEME['fg'],
-        relief='flat',
-        cursor='hand2',
-        padx=16,
-        pady=7,
-        command=close_debug_update_window
-    ).pack(side='right')
+    apply_btn = _small_btn(button_row, "Install Update", lambda: apply_available_update(user_initiated=True), primary=True)
+    apply_btn.pack(side="left")
+    apply_btn.configure(state="disabled")
+    _small_btn(button_row, "Check Again", lambda: start_app_update_check(user_initiated=True)).pack(side="left", padx=(8, 0))
+    _small_btn(button_row, "Open Release", lambda: webbrowser.open(
+        (_update_system_state.get("release_info") or {}).get("release_url")
+        or f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
+    )).pack(side="left", padx=(8, 0))
+    _small_btn(button_row, "Close", close_debug_update_window).pack(side="right")
 
-    debug_update_window.after_idle(lambda: center_window(debug_update_window, root))
+    def status_color(color):
+        status_label_widget.configure(fg=color)
+
+    win._update_widgets = {
+        "current": current_var,
+        "latest": latest_var,
+        "runtime": runtime_var,
+        "last_check": last_check_var,
+        "status": status_var,
+        "note": note_var,
+        "apply_btn": apply_btn,
+        "status_color": status_color,
+    }
+
+    win.after_idle(lambda: center_window(win, root))
+    win.lift()
+    win.focus_force()
+    if start_check:
+        start_app_update_check(user_initiated=True)
+    return win
+
 
 def debug_update_check():
-    """Debug function to check update system status"""
-    try:
-        log("\n=== DEBUG: Update System Status ===")
-
-        debug_data = {
-            'current_version': CURRENT_VERSION,
-            'runtime_mode': get_runtime_update_mode(),
-            'api_status': 'Not checked',
-            'latest_release': 'Unknown',
-            'preferred_asset': 'Unknown',
-            'installer_asset': 'Unknown',
-            'update_mode': 'Unknown',
-            'last_check': 'Not found',
-            'release_url': '',
-        }
-
-        debug_lines = [
-            "Repository Configuration:",
-            f"Owner: {REPO_OWNER}",
-            f"Name: {REPO_NAME}",
-            f"API URL: {GITHUB_API_URL}",
-            f"Current Version: {CURRENT_VERSION}",
-            f"Runtime Mode: {get_runtime_update_mode()}",
-            f"Executable: {sys.executable}",
-        ]
-
-        debug_lines.append("")
-        debug_lines.append("Update Check File Status:")
-        if UPDATE_CHECK_FILE.exists():
-            with open(UPDATE_CHECK_FILE, 'r') as f:
-                last_check = float(f.read().strip())
-                time_since_last_check = time.time() - last_check
-                readable_last_check = time.ctime(last_check)
-                debug_data['last_check'] = readable_last_check
-                debug_lines.append(f"Last check: {readable_last_check}")
-                debug_lines.append(f"Time since last check: {time_since_last_check/3600:.2f} hours")
-        else:
-            debug_lines.append("Update check file not found")
-
-        debug_lines.append("")
-        debug_lines.append("Testing GitHub API Connection:")
-        try:
-            response = requests.get(GITHUB_API_URL, headers=get_update_headers(), timeout=10)
-            debug_data['api_status'] = str(response.status_code)
-            debug_lines.append(f"API Response Status: {response.status_code}")
-
-            if response.status_code == 200:
-                latest_release = response.json()
-                latest_version = latest_release.get('tag_name', '').lstrip('v')
-                preferred_asset = get_preferred_update_asset(latest_release)
-                installer_asset = get_preferred_update_asset(latest_release, require_installer=True)
-                debug_data['latest_release'] = latest_version or 'Unknown'
-                debug_data['release_url'] = latest_release.get('html_url', '')
-                debug_data['preferred_asset'] = preferred_asset.get('name') if preferred_asset else 'No .exe asset found'
-                debug_data['installer_asset'] = installer_asset.get('name') if installer_asset else 'No installer asset found'
-                debug_lines.append(f"Latest Release: {latest_version or 'Unknown'}")
-                debug_lines.append(f"Release Page: {latest_release.get('html_url', 'N/A')}")
-                debug_lines.append(
-                    f"Preferred Asset: {debug_data['preferred_asset']}"
-                )
-                debug_lines.append(
-                    f"Installer Asset: {debug_data['installer_asset']}"
-                )
-                debug_lines.append(
-                    f"Version Comparison: {get_version_comparison_info(latest_version, CURRENT_VERSION)['message']}"
-                )
-                if is_packaged_runtime():
-                    debug_data['update_mode'] = 'Installer launch supported'
-                    debug_lines.append("In-app update mode: installer launch supported")
-                else:
-                    debug_data['update_mode'] = 'Source build fallback to release page'
-                    debug_lines.append("In-app update mode: source build; release page fallback will be used")
-            else:
-                debug_lines.append(f"API Error: {response.text[:300]}")
-        except Exception as e:
-            debug_data['api_status'] = 'Error'
-            debug_lines.append(f"API Connection Error: {str(e)}")
-
-        debug_lines.append("")
-        debug_lines.append("=== DEBUG COMPLETED ===")
-
-        for line in debug_lines:
-            log(line)
-
-        show_debug_update_window(debug_data, "\n".join(debug_lines))
-        
-    except Exception as e:
-        log(f"Debug Error: {str(e)}")
+    """Same as Check for Updates — kept as an alias."""
+    set_status_threadsafe("Checking for app updates in background...")
+    open_update_system(start_check=True, auto_apply=True)
 
 # Create main window
 root = tk.Tk()
 root.title("Media Downloader")
-root.geometry("880x860")
-root.minsize(760, 620)  # Set minimum window size
+root.geometry("880x1020")
+root.minsize(760, 740)
 root.configure(bg=THEME['bg'])
 
 # Quality settings variables
@@ -2130,6 +2071,95 @@ def show_progress_section(mode):
     except Exception:
         pass
 
+_dep_jobs = set()
+dep_progress_panel = None
+_ffmpeg_settings_progress = None
+
+
+def _run_on_ui(callback):
+    if threading.current_thread() is threading.main_thread():
+        callback()
+        return
+    if "ui_queue" in globals():
+        ui_queue.put(callback)
+
+
+def begin_dep_job(job_id, title, message, percent=None, indeterminate=False):
+    """Show the hub dependency/update bar for one background job."""
+    _dep_jobs.add(job_id)
+
+    def apply():
+        panel = globals().get("dep_progress_panel")
+        if panel is None:
+            return
+        panel.show(title=title, message=message, percent=percent, indeterminate=indeterminate)
+        if message and "status_label" in globals():
+            status_label.config(text=message)
+        settings_panel = globals().get("_ffmpeg_settings_progress")
+        if job_id == "ffmpeg" and settings_panel is not None:
+            settings_panel.show(title=title, message=message, percent=percent, indeterminate=indeterminate)
+        update_panel = globals().get("_update_system_progress")
+        if job_id == "app-update" and update_panel is not None:
+            update_panel.show(title=title, message=message, percent=percent, indeterminate=indeterminate)
+
+    _run_on_ui(apply)
+
+
+def update_dep_job(job_id, message=None, percent=None, title=None, indeterminate=None):
+    """Update an active dependency/update bar."""
+    if job_id not in _dep_jobs:
+        _dep_jobs.add(job_id)
+
+    def apply():
+        panel = globals().get("dep_progress_panel")
+        if panel is None:
+            return
+        panel.update(message=message, percent=percent, title=title, indeterminate=indeterminate)
+        if message and "status_label" in globals():
+            status_label.config(text=message)
+        settings_panel = globals().get("_ffmpeg_settings_progress")
+        if job_id == "ffmpeg" and settings_panel is not None:
+            settings_panel.update(message=message, percent=percent, title=title, indeterminate=indeterminate)
+        update_panel = globals().get("_update_system_progress")
+        if job_id == "app-update" and update_panel is not None:
+            update_panel.update(message=message, percent=percent, title=title, indeterminate=indeterminate)
+
+    _run_on_ui(apply)
+
+
+def end_dep_job(job_id):
+    """Hide the hub dependency bar when no download/update jobs remain."""
+    _dep_jobs.discard(job_id)
+
+    def apply():
+        panel = globals().get("dep_progress_panel")
+        settings_panel = globals().get("_ffmpeg_settings_progress")
+        if job_id == "ffmpeg" and settings_panel is not None:
+            settings_panel.hide()
+        update_panel = globals().get("_update_system_progress")
+        if job_id == "app-update" and update_panel is not None:
+            update_panel.hide()
+        if panel is None:
+            return
+        if not _dep_jobs:
+            panel.hide()
+
+    _run_on_ui(apply)
+
+
+def ffmpeg_download_progress(message, percent=None):
+    """FFmpeg download callback that drives the visible processing bar."""
+    ffmpeg_log(message)
+    parsed = parse_progress_percent(message, percent)
+    extracting = "extract" in str(message).lower()
+    update_dep_job(
+        "ffmpeg",
+        message=message,
+        percent=parsed,
+        title="FFmpeg download / update",
+        indeterminate=parsed is None or extracting,
+    )
+
 def enable_buttons():
     """Enable the main download buttons and hide transient controls."""
     try:
@@ -2330,10 +2360,6 @@ def queue_direct_download_url(url, *, open_window=False):
 def queue_direct_download_from_entry(*, open_window=False):
     """Queue the current main-URL entry into the download list."""
     return queue_direct_download_url(url_entry.get().strip(), open_window=open_window)
-
-def start_direct_download():
-    """Open the IDM-style direct-download list window."""
-    open_download_list_window()
 
 def toggle_direct_pause_resume():
     """Pause or resume the current direct download from the main window."""
@@ -2950,6 +2976,69 @@ def is_packaged_auto_update_enabled():
         return True
     return bool(updates.get("packaged_auto_update", True))
 
+
+def fetch_latest_release_info():
+    """Fetch the latest GitHub release without blocking the UI thread."""
+    result = {
+        "ok": False,
+        "error": None,
+        "release": None,
+        "latest_version": "",
+        "current_version": CURRENT_VERSION,
+        "is_newer": False,
+        "comparison": "",
+        "release_url": f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest",
+        "preferred_asset": None,
+        "installer_asset": None,
+        "installer": None,
+    }
+    try:
+        response = requests.get(GITHUB_API_URL, headers=get_update_headers(), timeout=15)
+        if response.status_code != 200:
+            result["error"] = f"GitHub returned HTTP {response.status_code}."
+            return result
+        release = response.json()
+        latest_version = str(release.get("tag_name") or "").lstrip("v").strip()
+        if not latest_version:
+            result["error"] = "The latest GitHub release has no version tag."
+            return result
+        comparison = get_version_comparison_info(latest_version, CURRENT_VERSION)
+        preferred = get_preferred_update_asset(release)
+        installer = get_preferred_update_asset(release, require_installer=True)
+        result.update({
+            "ok": True,
+            "release": release,
+            "latest_version": latest_version,
+            "is_newer": bool(comparison.get("is_newer")),
+            "comparison": comparison.get("message") or "",
+            "release_url": release.get("html_url") or result["release_url"],
+            "preferred_asset": preferred.get("name") if preferred else None,
+            "installer_asset": installer.get("name") if installer else None,
+            "installer": installer,
+        })
+        return result
+    except requests.exceptions.RequestException as exc:
+        result["error"] = f"Network error: {exc}"
+        return result
+    except Exception as exc:
+        result["error"] = str(exc)
+        return result
+
+
+def app_is_busy_for_update():
+    """True when an in-progress download should delay restart."""
+    try:
+        return is_site_download_running() or is_direct_download_active()
+    except Exception:
+        return False
+
+
+def source_working_tree_is_clean(repo_root):
+    status = run_git_command(["status", "--porcelain"], repo_root)
+    if status.returncode != 0:
+        raise RuntimeError(status.stderr.strip() or status.stdout.strip() or "git status failed")
+    return not (status.stdout or "").strip()
+
 def run_git_command(args, cwd, timeout=60):
     """Run a git command and return CompletedProcess."""
     return subprocess.run(
@@ -2974,7 +3063,7 @@ def restart_source_app():
         return False
 
 def check_and_apply_source_git_update(user_initiated=False):
-    """Check git remote and fast-forward the local source checkout in background."""
+    """Fast-forward the local source checkout when the tree is clean."""
     settings = get_source_update_settings()
     if not settings["source_auto_pull"] and not user_initiated:
         app_update_log("Source auto-pull is disabled in app_flags.json.")
@@ -2985,21 +3074,20 @@ def check_and_apply_source_git_update(user_initiated=False):
         app_update_log("Source auto-update skipped: project is not a git checkout.")
         return False
 
-    git_available = shutil.which("git")
-    if not git_available:
+    if not shutil.which("git"):
         app_update_log("Source auto-update skipped: git is not installed.")
         if user_initiated:
             show_error_threadsafe("Git Not Found", "Git is required for source auto-update but was not found on PATH.")
         return False
 
     try:
-        status = run_git_command(["status", "--porcelain"], repo_root)
-        if status.returncode != 0:
-            raise RuntimeError(status.stderr.strip() or status.stdout.strip() or "git status failed")
-        if (status.stdout or "").strip():
+        if not source_working_tree_is_clean(repo_root):
             app_update_log("Source auto-update skipped: local repository has uncommitted changes.")
             if user_initiated:
-                show_info_threadsafe("Source Update", "Skipped because local git changes are present.")
+                refresh_update_system_ui(
+                    status="Local git changes are present, so source pull was skipped.",
+                    apply_enabled=False,
+                )
             return False
 
         branch = settings["source_branch"]
@@ -3011,6 +3099,7 @@ def check_and_apply_source_git_update(user_initiated=False):
 
         remote = settings["source_remote"] or "origin"
         app_update_log(f"Checking git updates from {remote}/{branch}...")
+        begin_dep_job("app-update", "App update", f"Checking git updates from {remote}/{branch}...", indeterminate=True)
         fetch_proc = run_git_command(["fetch", "--prune", remote, branch], repo_root, timeout=120)
         if fetch_proc.returncode != 0:
             raise RuntimeError(fetch_proc.stderr.strip() or "git fetch failed")
@@ -3021,276 +3110,269 @@ def check_and_apply_source_git_update(user_initiated=False):
         behind_count = int((behind_proc.stdout or "0").strip() or "0")
         if behind_count <= 0:
             app_update_log("Source repository already up to date.")
-            if user_initiated:
-                show_info_threadsafe("No Updates", "Source repository is already up to date.")
             return False
 
         app_update_log(f"Pulling {behind_count} new commit(s) from {remote}/{branch}...")
-        set_status_threadsafe("Applying source update from git in background...")
+        update_dep_job(
+            "app-update",
+            message=f"Pulling {behind_count} update(s) from {remote}/{branch}...",
+            title="App update",
+            indeterminate=True,
+        )
         pull_proc = run_git_command(["pull", "--ff-only", remote, branch], repo_root, timeout=180)
         if pull_proc.returncode != 0:
             raise RuntimeError(pull_proc.stderr.strip() or pull_proc.stdout.strip() or "git pull failed")
 
         app_update_log("Source update applied successfully.")
         set_status_threadsafe("Source update applied")
-        if settings["source_auto_restart_after_pull"]:
-            app_update_log("Restarting app to load new source update.")
+        refresh_update_system_ui(status="Source update applied. Restart the app to load it.", apply_enabled=False)
+        if settings["source_auto_restart_after_pull"] or user_initiated:
             if not restart_source_app():
-                show_info_threadsafe("Update Applied", "Source was updated. Please restart the app manually.")
-        else:
-            show_info_threadsafe("Update Applied", "Source code updated successfully. Restart the app to use new code.")
+                show_info_threadsafe("Update Applied", "Source was updated. Please restart the app to use the new code.")
         return True
     except Exception as update_error:
         app_update_log(f"Source auto-update error: {update_error}")
         if user_initiated:
+            refresh_update_system_ui(status=f"Source update failed: {update_error}", apply_enabled=False)
             show_error_threadsafe("Source Update Failed", f"Could not update from git:\n{update_error}")
         return False
+    finally:
+        end_dep_job("app-update")
 
 def check_updates_on_startup(user_initiated=False):
-    """Check for app updates and install packaged releases in the background."""
+    """Check GitHub for a newer release in the background and apply it safely."""
     global FORCE_UPDATE_CHECK
 
     update_started = False
-    performed_check = False
-
     try:
-        debug_log("Update check process started.")
-        print("\n=== UPDATE CHECK PROCESS STARTED ===")
-
         if not should_check_for_updates() and not user_initiated:
-            debug_log("Skipping app update check because the last check was recent.")
-            check_ffmpeg_update()
             return False
 
-        performed_check = True
-
-        if not is_packaged_runtime():
-            app_update_log("Checking source repository for updates...")
-            update_started = check_and_apply_source_git_update(user_initiated=user_initiated)
-            if performed_check:
-                update_check_timestamp()
-            if not update_started:
-                check_ffmpeg_update()
-            debug_log("Update check process completed.")
-            print("=== UPDATE CHECK PROCESS COMPLETED ===\n")
-            return update_started
-
-        if not is_packaged_auto_update_enabled():
-            app_update_log("Packaged auto-update is disabled in app_flags.json.")
-            if user_initiated:
-                show_info_threadsafe(
-                    "Updates Disabled",
-                    "Automatic installer updates are turned off.\n\n"
-                    f"Open releases manually:\nhttps://github.com/{REPO_OWNER}/{REPO_NAME}/releases",
-                )
-            if performed_check:
-                update_check_timestamp()
-            check_ffmpeg_update()
-            return False
-
+        if user_initiated:
+            begin_dep_job("app-update", "App update", "Checking for updates...", indeterminate=True)
+            refresh_update_system_ui(status="Checking GitHub for updates…", apply_enabled=False)
         app_update_log("Checking GitHub for a newer application release...")
-        latest_release = check_for_updates()
+        info = fetch_latest_release_info()
+        _update_system_state["release_info"] = info
+        update_check_timestamp()
 
-        if latest_release:
-            latest_version = latest_release.get('tag_name', '').lstrip('v')
-            release_url = latest_release.get('html_url') or f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
-
-            if is_packaged_runtime():
-                app_update_log(f"New version {latest_version} detected. Starting background update.")
-                set_status_threadsafe(f"Downloading app update {latest_version} in background...")
-                update_started = download_and_install_update(latest_release, user_initiated=user_initiated)
-            else:
-                app_update_log(
-                    f"New version {latest_version} detected, but automatic installation is only supported in the packaged app."
-                )
-                if user_initiated:
-                    show_info_threadsafe(
-                        "Source Build Detected",
-                        "Automatic in-app installation is only supported for the packaged app.\n\n"
-                        "The latest release page will open in your browser instead.",
-                    )
-                    webbrowser.open(release_url)
-        else:
+        if not info.get("ok"):
+            app_update_log(info.get("error") or "Update check failed.")
+            refresh_update_system_ui(info, apply_enabled=False)
             if user_initiated:
-                show_info_threadsafe("No Updates", "You have the latest version.")
-            debug_log("No updates available.")
+                show_error_threadsafe(
+                    "Update Check Failed",
+                    f"{info.get('error') or 'Could not check for updates.'}\n\nPlease check your internet connection.",
+                )
+            return False
 
-        if performed_check:
-            update_check_timestamp()
+        refresh_update_system_ui(info, apply_enabled=bool(info.get("is_newer")))
+        if not info.get("is_newer"):
+            app_update_log(f"Already up to date ({CURRENT_VERSION}).")
+            if user_initiated:
+                set_status_threadsafe("You have the latest version")
+            return False
 
-        if not update_started:
-            debug_log("Starting FFmpeg update check.")
-            check_ffmpeg_update()
+        latest_version = info.get("latest_version")
+        app_update_log(f"New version {latest_version} is available.")
+        set_status_threadsafe(f"Update {latest_version} is available")
 
-        debug_log("Update check process completed.")
-        print("=== UPDATE CHECK PROCESS COMPLETED ===\n")
+        should_apply = bool(_update_system_state.get("auto_apply")) or (not user_initiated)
+        if is_packaged_runtime():
+            if not is_packaged_auto_update_enabled() and not user_initiated:
+                app_update_log("Packaged auto-update is disabled in app_flags.json.")
+                return False
+            if should_apply:
+                update_started = download_and_install_update(info["release"], user_initiated=user_initiated)
+        elif user_initiated and should_apply:
+            update_started = check_and_apply_source_git_update(user_initiated=True)
+        elif not user_initiated:
+            settings = get_source_update_settings()
+            if settings["source_auto_pull"]:
+                update_started = check_and_apply_source_git_update(user_initiated=False)
+
         return update_started
-
-    except Exception as e:
-        app_update_log(f"Error in update check process: {str(e)}")
-        print(f"Error in update check process: {str(e)}")
-        print(traceback.format_exc())
-
+    except Exception as exc:
+        app_update_log(f"Error in update check process: {exc}")
         if user_initiated:
             show_error_threadsafe(
                 "Update Check Failed",
-                f"Failed to check for updates: {str(e)}\n\nPlease check your internet connection.",
+                f"Failed to check for updates: {exc}\n\nPlease check your internet connection.",
             )
         return False
     finally:
         FORCE_UPDATE_CHECK = False
+        _update_system_state["checking"] = False
+        if not update_started:
+            end_dep_job("app-update")
+
 
 def check_for_updates():
-    """Check for updates on GitHub and return the latest version if available."""
-    try:
-        debug_log("Checking for updates.")
-        print("\n=== CHECKING FOR UPDATES ===")
-        print(f"Current version: {CURRENT_VERSION}")
-        print(f"GitHub API URL: {GITHUB_API_URL}")
-        print(f"Repository: {REPO_OWNER}/{REPO_NAME}")
-        
-        # Make the request with headers to avoid rate limiting
-        headers = get_update_headers()
-        
-        print("Sending request to GitHub API...")
-        response = requests.get(GITHUB_API_URL, headers=headers, timeout=10)
-        debug_log(f"GitHub API Response Status: {response.status_code}")
-        print(f"GitHub API Response Status: {response.status_code}")
-        
-        if response.status_code != 200:
-            debug_log(f"GitHub API Error: {response.text}")
-            print(f"GitHub API Error: {response.text}")
-            return None
-            
-        latest_release = response.json()
-        
-        # Check if there's a valid release
-        if 'tag_name' not in latest_release:
-            debug_log("No tag_name found in release.")
-            print("No tag_name found in GitHub response")
-            return None
-            
-        # Get the latest version number (strip v prefix if present)
-        latest_version = latest_release.get('tag_name', '').lstrip('v')
-        debug_log(f"Latest version on GitHub: {latest_version}")
-        print(f"Latest version on GitHub: {latest_version}")
-        
-        if not latest_version:
-            debug_log("Empty version tag found in release.")
-            print("Empty version tag found in release")
-            return None
-            
-        # Compare versions with detailed logging
-        comparison_info = get_version_comparison_info(latest_version, CURRENT_VERSION)
-        print(f"\n=== VERSION COMPARISON DETAILS ===")
-        print(f"Current version: {CURRENT_VERSION}")
-        print(f"Latest version: {latest_version}")
-        print(f"Comparison summary: {comparison_info['message']}")
-        print(f"Is update available: {'Yes' if comparison_info['is_newer'] else 'No'}")
-        
-        if comparison_info['is_newer']:
-            log(f"New version {latest_version} is available!")
-            print(f"✅ New version {latest_version} is available!")
-            # Return the entire release data for use in download_and_install_update
-            return latest_release
-        else:
-            debug_log("You have the latest version.")
-            print("✓ You have the latest version")
-            return None
-    except requests.exceptions.RequestException as e:
-        log(f"Network error checking for updates: {e}")
-        print(f"Network error checking for updates: {e}")
-        return None
-    except Exception as e:
-        log(f"Unexpected error checking for updates: {e}")
-        print(f"Unexpected error checking for updates: {e}")
-        print(traceback.format_exc())
-        return None
+    """Return the latest GitHub release when it is newer than this install."""
+    info = fetch_latest_release_info()
+    _update_system_state["release_info"] = info
+    if info.get("ok") and info.get("is_newer"):
+        return info.get("release")
+    return None
+
+def schedule_install_and_exit(installer_path):
+    """Install after the app is idle so an in-progress download is not interrupted."""
+    global _pending_update_installer
+    _pending_update_installer = Path(installer_path)
+    launch_background_update_installer(installer_path)
+    update_dep_job(
+        "app-update",
+        message="Update downloaded. The app will restart when it is idle...",
+        title="App update",
+        indeterminate=True,
+    )
+
+    def try_exit():
+        if app_is_busy_for_update():
+            set_status_threadsafe("Update is ready. Waiting for current downloads to finish...")
+            root.after(1500, try_exit)
+            return
+        set_status_threadsafe("Restarting to finish the update...")
+        exit_application()
+
+    _run_on_ui(lambda: root.after(400, try_exit))
+
+
+def apply_available_update(user_initiated=True):
+    """Apply the latest checked release from the Update System window."""
+    if _update_system_state.get("applying"):
+        return False
+    info = _update_system_state.get("release_info") or {}
+    if not info.get("is_newer"):
+        start_app_update_check(user_initiated=True)
+        return False
+
+    def worker():
+        _update_system_state["applying"] = True
+        try:
+            if is_packaged_runtime():
+                download_and_install_update(info.get("release"), user_initiated=user_initiated)
+            else:
+                if not check_and_apply_source_git_update(user_initiated=True):
+                    release_url = info.get("release_url") or f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/latest"
+                    refresh_update_system_ui(
+                        info,
+                        status="Could not pull source automatically. Opening the GitHub release page.",
+                        apply_enabled=True,
+                    )
+                    webbrowser.open(release_url)
+        finally:
+            _update_system_state["applying"] = False
+
+    threading.Thread(target=worker, daemon=True).start()
+    return True
+
 
 def download_and_install_update(release, user_initiated=False):
-    """Download and silently install the latest packaged release in the background."""
+    """Download the packaged installer in the background and restart when idle."""
+    succeeded = False
     try:
-        print("\n=== DOWNLOADING UPDATE ===")
-        
-        # If release is a string (legacy calls), convert to new format
         if isinstance(release, str):
-            print(f"Converting legacy version string: {release}")
-            latest_version = release
-            # We need to fetch the release data
-            headers = get_update_headers()
-            response = requests.get(GITHUB_API_URL, headers=headers, timeout=10)
-            if response.status_code != 200:
-                raise Exception(f"Could not fetch release data: {response.status_code}")
-            release = response.json()
+            info = fetch_latest_release_info()
+            if not info.get("ok") or not info.get("release"):
+                raise RuntimeError(info.get("error") or "Could not fetch release data")
+            release = info["release"]
+            latest_version = info.get("latest_version") or release.get("tag_name", "").lstrip("v")
         else:
-            latest_version = release.get('tag_name', '').lstrip('v')
-        
-        print(f"Preparing to download version {latest_version}")
+            latest_version = str((release or {}).get("tag_name", "")).lstrip("v")
 
         if not is_packaged_runtime():
             return False
 
-        assets = release.get('assets', [])
-        print(f"Release has {len(assets)} assets")
-        for asset in assets:
-            print(f"Asset: {asset.get('name')} ({asset.get('content_type')})")
-
         installer_asset = get_preferred_update_asset(release, require_installer=True)
         if not installer_asset:
-            raise Exception("No installer executable found in release assets")
+            installer_asset = get_preferred_update_asset(release, require_installer=False)
+        if not installer_asset:
+            raise RuntimeError("No Windows installer was found in the latest GitHub release.")
 
         update_dir = get_app_update_dir()
-        safe_version = re.sub(r'[^A-Za-z0-9._-]+', '_', latest_version or "latest")
+        safe_version = re.sub(r"[^A-Za-z0-9._-]+", "_", latest_version or "latest")
         exe_path = update_dir / f"{safe_version}-{installer_asset['name']}"
-        part_path = exe_path.with_suffix(exe_path.suffix + ".part")
+        part_path = Path(str(exe_path) + ".part")
 
-        download_url = installer_asset['browser_download_url']
-        print(f"Downloading from: {download_url}")
+        if exe_path.exists() and exe_path.stat().st_size > 0:
+            app_update_log(f"Using already downloaded installer: {exe_path}")
+            schedule_install_and_exit(exe_path)
+            succeeded = True
+            return True
+
+        download_url = installer_asset["browser_download_url"]
         app_update_log(f"Downloading update installer for version {latest_version}...")
-        set_status_threadsafe(f"Downloading update {latest_version} in background...")
+        begin_dep_job("app-update", "App update", f"Downloading update {latest_version}...", percent=0)
+        refresh_update_system_ui(status=f"Downloading update {latest_version}…", apply_enabled=False)
 
         response = requests.get(download_url, stream=True, timeout=30)
         response.raise_for_status()
 
-        total_size = int(response.headers.get('content-length', 0))
+        total_size = int(response.headers.get("content-length", 0))
         downloaded = 0
         last_logged_bucket = -1
+        last_ui_percent = -2
+        last_ui_at = 0.0
+        last_unknown_report = 0
 
-        with open(part_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
+        with open(part_path, "wb") as handle:
+            for chunk in response.iter_content(chunk_size=256 * 1024):
                 if not chunk:
                     continue
                 downloaded += len(chunk)
-                f.write(chunk)
+                handle.write(chunk)
+                now = time.monotonic()
                 if total_size > 0:
                     percent = (downloaded / total_size) * 100
-                    bucket = int(percent // 10)
+                    ui_percent = int(percent)
+                    if ui_percent >= last_ui_percent + 2 or now - last_ui_at >= 0.4:
+                        last_ui_percent = ui_percent
+                        last_ui_at = now
+                        update_dep_job(
+                            "app-update",
+                            message=f"Downloading update {latest_version}... {ui_percent}%",
+                            percent=ui_percent,
+                            title="App update",
+                        )
+                    bucket = int(percent // 25)
                     if bucket > last_logged_bucket:
                         last_logged_bucket = bucket
-                        app_update_log(
-                            f"Download progress: {percent:.0f}% ({downloaded}/{total_size} bytes)"
-                        )
+                        app_update_log(f"Download progress: {percent:.0f}%")
+                elif downloaded - last_unknown_report >= 4 * 1024 * 1024:
+                    last_unknown_report = downloaded
+                    update_dep_job(
+                        "app-update",
+                        message=f"Downloading update {latest_version}... {downloaded / (1024 * 1024):.1f} MB",
+                        title="App update",
+                        indeterminate=True,
+                    )
 
+        if downloaded <= 0:
+            raise RuntimeError("The update download returned no data.")
         shutil.move(str(part_path), str(exe_path))
-        print(f"Download complete: {exe_path}")
         app_update_log(f"Installer downloaded to: {exe_path}")
-        app_update_log("Launching silent installer and restarting the app after update.")
-        set_status_threadsafe("Installing downloaded update in background...")
-
-        launch_background_update_installer(exe_path)
-        ui_queue.put(lambda: root.after(800, exit_application))
+        schedule_install_and_exit(exe_path)
+        succeeded = True
         return True
-            
-    except Exception as e:
-        error_msg = str(e)
+    except Exception as exc:
+        error_msg = str(exc)
         app_update_log(f"Error installing update: {error_msg}")
-        print(f"Error installing update: {error_msg}")
-        print(traceback.format_exc())
+        refresh_update_system_ui(status=f"Update failed: {error_msg}", apply_enabled=True)
         if user_initiated:
             show_error_threadsafe("Update Error", f"Failed to install update: {error_msg}")
         else:
             set_status_threadsafe("App update failed")
         return False
+    finally:
+        if not succeeded:
+            end_dep_job("app-update")
+            try:
+                part_path = locals().get("part_path")
+                if part_path and Path(part_path).exists():
+                    Path(part_path).unlink()
+            except Exception:
+                pass
 
 def start_app_update_check(user_initiated=False):
     """Run the app update check in a single background worker."""
@@ -3298,12 +3380,13 @@ def start_app_update_check(user_initiated=False):
 
     if user_initiated:
         FORCE_UPDATE_CHECK = True
+        _update_system_state["checking"] = True
 
     with app_update_lock:
         if app_update_thread is not None and app_update_thread.is_alive():
             app_update_log("An app update check is already running in the background.")
             if user_initiated:
-                show_info_threadsafe("Update Check", "An update check is already running.")
+                set_status_threadsafe("An update check is already running...")
             return False
 
         app_update_thread = threading.Thread(
@@ -3355,14 +3438,14 @@ def run_ffmpeg_background_sync(force_update=False, user_initiated=False):
     try:
         if user_initiated:
             ffmpeg_log("Manual install/update started in background.")
-            set_status_threadsafe("Installing or updating FFmpeg in background...")
+            begin_dep_job("ffmpeg", "FFmpeg download / update", "Installing or updating FFmpeg...", indeterminate=True)
         else:
             ffmpeg_log("Automatic FFmpeg startup check started.")
             set_status_threadsafe("Checking FFmpeg in background...")
 
         resolved_ffmpeg_path, resolved_ffprobe_path, updated = update_managed_ffmpeg_if_needed(
             logger=ffmpeg_log,
-            progress_callback=ffmpeg_log,
+            progress_callback=ffmpeg_download_progress,
             force=force_update,
             extra_paths=[APP_DIR / "ffmpeg" / "ffmpeg.exe"],
         )
@@ -3386,6 +3469,8 @@ def run_ffmpeg_background_sync(force_update=False, user_initiated=False):
         print(f"Error initializing FFmpeg: {exc}")
         print(traceback.format_exc())
         set_status_threadsafe("Error: FFmpeg initialization failed")
+    finally:
+        end_dep_job("ffmpeg")
 
 
 def start_ffmpeg_background_sync(force_update=False, user_initiated=False):
@@ -3413,9 +3498,265 @@ def force_install_or_update_ffmpeg():
     started = start_ffmpeg_background_sync(force_update=True, user_initiated=True)
     if started:
         messagebox.showinfo(
-            "FFmpeg Background Update",
-            "FFmpeg install/update started in the background.\n\nYou can keep using the app while it finishes.",
+            "FFmpeg",
+            "Bundled FFmpeg install/update started in the background.\n\n"
+            "You can keep using the app while it finishes.",
         )
+
+
+_ffmpeg_settings_window = None
+
+
+def _ffmpeg_status_text():
+    custom_ffmpeg, _custom_ffprobe = get_custom_ffmpeg_paths()
+    current = ffmpeg_path if ffmpeg_path and os.path.exists(ffmpeg_path) else None
+    if not current:
+        found_ffmpeg, _found_ffprobe = find_existing_ffmpeg()
+        current = found_ffmpeg
+    if not current:
+        return "Not set", "Not found", False
+    source = "Custom path" if custom_ffmpeg else "Automatic"
+    version = get_ffmpeg_version_line(current)
+    status = version.split("Copyright", 1)[0].strip() if version else "Ready"
+    return str(current), f"{source}  ·  {status}", True
+
+
+def open_ffmpeg_settings():
+    """Compact FFmpeg path and install dialog."""
+    global _ffmpeg_settings_window, _ffmpeg_settings_progress
+
+    if _ffmpeg_settings_window is not None and _ffmpeg_settings_window.winfo_exists():
+        _ffmpeg_settings_window.lift()
+        _ffmpeg_settings_window.focus_force()
+        return _ffmpeg_settings_window
+
+    win = tk.Toplevel(root)
+    _ffmpeg_settings_window = win
+    win.title("FFmpeg")
+    win.configure(bg=THEME["bg"])
+    win.resizable(False, False)
+    apply_window_icon(win)
+    win.transient(root)
+
+    def close_window():
+        global _ffmpeg_settings_window, _ffmpeg_settings_progress
+        _ffmpeg_settings_progress = None
+        try:
+            win.destroy()
+        except Exception:
+            pass
+        if _ffmpeg_settings_window is win:
+            _ffmpeg_settings_window = None
+
+    win.protocol("WM_DELETE_WINDOW", close_window)
+
+    path_var = tk.StringVar()
+    status_var = tk.StringVar()
+    note_var = tk.StringVar()
+
+    def refresh_status(note=""):
+        path_text, status_text, ready = _ffmpeg_status_text()
+        path_var.set(path_text)
+        status_var.set(status_text)
+        status_label.configure(fg=THEME["success"] if ready else THEME["error"])
+        if note:
+            note_var.set(note)
+        elif ready:
+            note_var.set("")
+        else:
+            note_var.set("Install FFmpeg, or choose an existing ffmpeg.exe")
+
+    def _small_button(parent, text, command, *, primary=False):
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            font=("Segoe UI", 9, "bold" if primary else "normal"),
+            bg=THEME["primary"] if primary else THEME["light_gray"],
+            fg="#ffffff" if primary else THEME["fg"],
+            activebackground=THEME["secondary"] if primary else THEME["border"],
+            activeforeground="#ffffff" if primary else THEME["fg"],
+            relief="flat",
+            padx=8,
+            pady=5,
+            cursor="hand2",
+        )
+
+    def change_path():
+        selected = filedialog.askopenfilename(
+            parent=win,
+            title="Choose ffmpeg.exe",
+            filetypes=[("FFmpeg", "ffmpeg.exe"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+        try:
+            resolved_ffmpeg, resolved_ffprobe = set_custom_ffmpeg_paths(selected)
+        except Exception as exc:
+            messagebox.showerror("FFmpeg", str(exc), parent=win)
+            return
+        apply_ffmpeg_runtime_paths(resolved_ffmpeg, resolved_ffprobe)
+        ffmpeg_log(f"Using custom FFmpeg: {resolved_ffmpeg}")
+        refresh_status("Custom path saved.")
+
+    def restore_default_path():
+        clear_custom_ffmpeg_paths()
+        ffmpeg_log("Custom FFmpeg path cleared. Restoring automatic detection...")
+        start_ffmpeg_background_sync(force_update=False, user_initiated=True)
+        refresh_status("Default path restored.")
+
+    def copy_winget_command():
+        command = f"winget install {FFMPEG_WINGET_PACKAGE}"
+        try:
+            pyperclip.copy(command)
+            refresh_status(f"Copied: {command}")
+        except Exception:
+            refresh_status(command)
+
+    def run_winget_install():
+        refresh_status("Installing with winget...")
+        begin_dep_job("ffmpeg", "FFmpeg download / update", f"Installing FFmpeg with winget ({FFMPEG_WINGET_PACKAGE})...", indeterminate=True)
+
+        def worker():
+            try:
+                ffmpeg_log(f"Installing FFmpeg with winget ({FFMPEG_WINGET_PACKAGE})...")
+                resolved_ffmpeg, resolved_ffprobe = install_ffmpeg_with_winget(logger=ffmpeg_log)
+                if not apply_ffmpeg_runtime_paths(resolved_ffmpeg, resolved_ffprobe):
+                    raise RuntimeError("Installed, but FFmpeg is not on PATH yet. Restart the app or choose the path.")
+                ffmpeg_log(f"FFmpeg configured from winget: {resolved_ffmpeg}")
+                ui_queue.put(lambda: refresh_status("FFmpeg is ready."))
+            except Exception as exc:
+                ui_queue.put(lambda: refresh_status(str(exc).split("\n", 1)[0]))
+                ui_queue.put(lambda: messagebox.showerror("FFmpeg", str(exc), parent=win))
+            finally:
+                end_dep_job("ffmpeg")
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def open_download_page():
+        webbrowser.open(FFMPEG_DOWNLOAD_PAGE)
+
+    pad = {"padx": 14, "pady": 0}
+    tk.Label(win, text="FFmpeg", font=("Segoe UI", 14, "bold"), fg=THEME["fg"], bg=THEME["bg"]).pack(
+        anchor="w", padx=14, pady=(14, 2)
+    )
+    status_label = tk.Label(win, textvariable=status_var, font=("Segoe UI", 9), fg=THEME["primary"], bg=THEME["bg"])
+    status_label.pack(anchor="w", **pad)
+
+    path_box = tk.Label(
+        win,
+        textvariable=path_var,
+        font=("Segoe UI", 9),
+        fg=THEME["fg"],
+        bg=THEME["light_gray"],
+        justify="left",
+        wraplength=400,
+        anchor="w",
+        padx=8,
+        pady=6,
+    )
+    path_box.pack(fill="x", padx=14, pady=(8, 8))
+
+    path_row = tk.Frame(win, bg=THEME["bg"])
+    path_row.pack(fill="x", padx=14, pady=(0, 10))
+    path_row.columnconfigure(0, weight=1)
+    path_row.columnconfigure(1, weight=1)
+    _small_button(path_row, "Change path", change_path, primary=True).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+    _small_button(path_row, "Restore default", restore_default_path).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+    tk.Label(win, text="Install if needed", font=("Segoe UI", 10, "bold"), fg=THEME["fg"], bg=THEME["bg"]).pack(
+        anchor="w", padx=14, pady=(2, 2)
+    )
+    tk.Label(
+        win,
+        text=f"Windows: winget install {FFMPEG_WINGET_PACKAGE}\nOr download from ffmpeg.org and add bin to PATH",
+        font=("Segoe UI", 9),
+        fg=THEME["gray"],
+        bg=THEME["bg"],
+        justify="left",
+    ).pack(anchor="w", padx=14, pady=(0, 8))
+
+    install_row = tk.Frame(win, bg=THEME["bg"])
+    install_row.pack(fill="x", padx=14)
+    install_row.columnconfigure(0, weight=1)
+    install_row.columnconfigure(1, weight=1)
+    if IS_WINDOWS:
+        _small_button(install_row, "Install with winget", run_winget_install, primary=True).grid(
+            row=0, column=0, sticky="ew", padx=(0, 4), pady=(0, 6)
+        )
+        _small_button(install_row, "Copy command", copy_winget_command).grid(
+            row=0, column=1, sticky="ew", padx=(4, 0), pady=(0, 6)
+        )
+        _small_button(install_row, "Open ffmpeg.org", open_download_page).grid(
+            row=1, column=0, sticky="ew", padx=(0, 4)
+        )
+        _small_button(install_row, "Update bundled", force_install_or_update_ffmpeg).grid(
+            row=1, column=1, sticky="ew", padx=(4, 0)
+        )
+    else:
+        _small_button(install_row, "Open ffmpeg.org", open_download_page, primary=True).grid(
+            row=0, column=0, sticky="ew", padx=(0, 4)
+        )
+        _small_button(install_row, "Update bundled", force_install_or_update_ffmpeg).grid(
+            row=0, column=1, sticky="ew", padx=(4, 0)
+        )
+
+    tk.Label(win, textvariable=note_var, font=("Segoe UI", 8), fg=THEME["gray"], bg=THEME["bg"], wraplength=400, justify="left").pack(
+        anchor="w", padx=14, pady=(8, 0)
+    )
+    _ffmpeg_settings_progress = DependencyProgressPanel(
+        win,
+        background=THEME["bg"],
+        foreground=THEME["fg"],
+        muted=THEME["gray"],
+        bar_style="Modern.Horizontal.TProgressbar",
+        wraplength=390,
+        use_ttk=False,
+        layout="pack",
+        layout_kwargs={"fill": "x", "padx": 14, "pady": (8, 0)},
+    )
+    _small_button(win, "Done", close_window, primary=True).pack(fill="x", padx=14, pady=(8, 14))
+
+    refresh_status()
+    win.update_idletasks()
+    width = max(420, win.winfo_reqwidth())
+    height = max(win.winfo_reqheight() + 8, 320)
+    win.geometry(f"{width}x{height}")
+    center_window(win, root)
+    win.lift()
+    win.focus_force()
+    return win
+
+
+def restore_default_settings():
+    """Reset download folder, quality, format, and FFmpeg path to defaults."""
+    confirmed = messagebox.askyesno(
+        "Restore default settings",
+        "Reset download folder, quality, format, playlist options, and FFmpeg path to defaults?",
+    )
+    if not confirmed:
+        return
+
+    defaults = default_app_settings()
+    video_quality_var.set(defaults["video_quality"])
+    audio_quality_var.set(defaults["audio_quality"])
+    format_var.set(defaults["format"])
+    quality_settings["video_quality"] = defaults["video_quality"]
+    quality_settings["audio_quality"] = defaults["audio_quality"]
+    quality_settings["format"] = defaults["format"]
+    if "download_playlist" in globals():
+        download_playlist.set(defaults["download_playlist"])
+    if "max_files_entry" in globals():
+        max_files_entry.configure(state="normal")
+        max_files_entry.delete(0, tk.END)
+        max_files_entry.insert(0, defaults["max_files"])
+        max_files_entry.configure(state="normal" if defaults["download_playlist"] else "disabled")
+    apply_download_root(defaults["download_root"], persist=False)
+    clear_custom_ffmpeg_paths()
+    save_app_settings()
+    start_ffmpeg_background_sync(force_update=False, user_initiated=True)
+    log("Restored default settings.")
+    messagebox.showinfo("Settings", "Default settings restored.")
 
 # Create menubar
 menubar = tk.Menu(root)
@@ -3465,7 +3806,8 @@ format_menu.add_radiobutton(label="MP4", variable=format_var, value='mp4', comma
 format_menu.add_radiobutton(label="WebM", variable=format_var, value='webm', command=lambda: on_format_change())
 format_menu.add_radiobutton(label="MKV", variable=format_var, value='mkv', command=lambda: on_format_change())
 settings_menu.add_separator()
-settings_menu.add_command(label="Install / Update FFmpeg", command=force_install_or_update_ffmpeg)
+settings_menu.add_command(label="FFmpeg...", command=open_ffmpeg_settings)
+settings_menu.add_command(label="Restore Default Settings", command=restore_default_settings)
 
 # Tools Menu
 tools_menu = tk.Menu(menubar, tearoff=0)
@@ -3486,24 +3828,12 @@ help_menu.add_separator()
 help_menu.add_command(label="Report Issue", 
     command=lambda: webbrowser.open("https://github.com/needyamin/media-downloader/issues"))
 
-# Add debug command to Help menu
-help_menu.add_separator()
-help_menu.add_command(label="Update System", command=debug_update_check)
-
-# Add function to force update check
 def force_check_updates():
-    """Force check for updates when user clicks menu item"""
-    log("Forcing update check...")
+    """Open the updater and apply a newer release when one is available."""
     set_status_threadsafe("Checking for app updates in background...")
-    print("\n=== FORCING UPDATE CHECK ===")
-    start_app_update_check(user_initiated=True)
+    open_update_system(start_check=True, auto_apply=True)
 
 # Custom Widget Classes
-class ModernButton(ttk.Button):
-    def __init__(self, master, **kwargs):
-        super().__init__(master, **kwargs)
-        self.configure(style='Modern.TButton')
-
 class ModernEntry(tk.Entry):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
@@ -4550,6 +4880,20 @@ direct_progress = ttk.Progressbar(
 direct_progress._grid_kwargs = {"row": 5, "column": 0, "sticky": "ew"}
 direct_progress.grid(**direct_progress._grid_kwargs)
 
+dep_progress_panel = DependencyProgressPanel(
+    progress_frame,
+    background=THEME["bg"],
+    foreground=THEME["fg"],
+    muted=THEME["gray"],
+    bar_style="Modern.Horizontal.TProgressbar",
+    wraplength=500,
+    use_ttk=False,
+    layout="grid",
+    layout_kwargs={"row": 6, "column": 0, "sticky": "ew", "pady": (14, 0)},
+)
+if _dep_jobs:
+    dep_progress_panel.show(title="Downloading or updating", message="Working…", indeterminate=True)
+
 show_progress_section(None)
 
 # Output Display
@@ -4720,7 +5064,8 @@ def build_tray_menu():
                 item('WebM', tray_set_format('webm'), checked=lambda menu_item: quality_settings.get('format') == 'webm', radio=True),
                 item('MKV', tray_set_format('mkv'), checked=lambda menu_item: quality_settings.get('format') == 'mkv', radio=True),
             )),
-            item('Install / Update FFmpeg', lambda icon=None, menu_item=None: tray_run_ui_action(force_install_or_update_ffmpeg)),
+            item('FFmpeg...', lambda icon=None, menu_item=None: tray_run_ui_action(open_ffmpeg_settings)),
+            item('Restore Default Settings', lambda icon=None, menu_item=None: tray_run_ui_action(restore_default_settings)),
         )),
         item('Tools', pystray.Menu(
             item('Video Converter', lambda icon=None, menu_item=None: tray_run_ui_action(open_converter)),
@@ -4733,7 +5078,6 @@ def build_tray_menu():
             item('About Us', lambda icon=None, menu_item=None: tray_run_ui_action(show_about_window)),
             item('Check for Updates', lambda icon=None, menu_item=None: tray_run_ui_action(force_check_updates)),
             item('Report Issue', lambda icon=None, menu_item=None: tray_run_ui_action(lambda: webbrowser.open("https://github.com/needyamin/media-downloader/issues"))),
-            item('Update System', lambda icon=None, menu_item=None: tray_run_ui_action(debug_update_check)),
         )),
         item('Exit', tray_exit_application),
     )
@@ -4827,7 +5171,7 @@ root.bind_all('<Control-Shift-V>', trigger_converter)
 root.bind_all('<Control-Shift-B>', trigger_background_remover)
 root.bind_all('<Control-Shift-Y>', trigger_screenshot_studio)
 root.bind_all('<Control-Shift-R>', trigger_yscreenrecorder)
-root.bind_all('<Control-Shift-U>', trigger_anika)
+root.bind_all('<Control-Shift-A>', trigger_anika)
 
 # Tray icon and screenshot hotkey start inside if __name__ == "__main__" (see below).
 
@@ -4859,11 +5203,6 @@ def update_direct_progress(percent, message=None):
             status_label.config(text=message)
     except Exception as e:
         log(f"Error updating direct progress: {str(e)}")
-
-def finish_progress():
-    progress['value'] = 100
-    progress_label.config(text="Download Complete!")
-    status_label.config(text="Download Complete!")
 
 def process_queue():
     """Process the UI update queue."""
@@ -4979,7 +5318,11 @@ def download_media(is_audio, url=None):
             log("FFmpeg not found. Attempting to download...")
             ffmpeg_path = download_ffmpeg()
             if not ffmpeg_path or not os.path.exists(ffmpeg_path):
-                messagebox.showerror("Error", "FFmpeg is required but could not be installed automatically.")
+                messagebox.showerror(
+                    "FFmpeg Required",
+                    "FFmpeg is required but could not be installed automatically.\n\n"
+                    + get_ffmpeg_install_help(),
+                )
                 hide_loading()
                 update_progress(0, "Ready to download")
                 return
@@ -5521,11 +5864,3 @@ if __name__ == "__main__":
         stop_screenshot_hotkey_listener()
         if tray_icon is not None:
             tray_icon.stop()
-
-def resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for PyInstaller."""
-    try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)

@@ -16,8 +16,9 @@ MODULES = [
     "desktop_tools.app.services.anika_config",
     "desktop_tools.app.hub.tool_actions",
     "desktop_tools.app.build_tools.manifest",
-    "desktop_tools.app.build_tools.nuitka",
+    "desktop_tools.app.build_tools.pyinstaller",
     "desktop_tools.app.build_tools.linux_appimage",
+    "desktop_tools.app.build_tools.msix",
 ]
 
 LAUNCHER_FUNCTIONS = (
@@ -43,6 +44,27 @@ def _repo_root() -> Path:
 
 def _anika_dir() -> Path:
     return _repo_root() / "src" / "desktop_tools" / "anika"
+
+
+def check_recorder_frame_inset() -> None:
+    from desktop_tools.app.ui.yscreenrecorder_app import (
+        RECORD_FRAME_THICKNESS,
+        inset_region_for_frame,
+        recording_frame_rects,
+    )
+
+    region = {"x": 10, "y": 20, "width": 200, "height": 120}
+    capture = inset_region_for_frame(region)
+    assert capture["x"] == 10 + RECORD_FRAME_THICKNESS
+    assert capture["y"] == 20 + RECORD_FRAME_THICKNESS
+    assert capture["width"] == 200 - (2 * RECORD_FRAME_THICKNESS)
+    assert capture["height"] == 120 - (2 * RECORD_FRAME_THICKNESS)
+    bars = recording_frame_rects(region)
+    assert len(bars) == 4
+    assert all(width > 0 and height > 0 for _x, _y, width, height in bars)
+    tiny = inset_region_for_frame({"x": 0, "y": 0, "width": 8, "height": 8})
+    assert tiny["width"] == 8
+    print("OK yscreenrecorder: recording frame stays outside capture")
 
 
 def check_anika_assets_subprocess() -> None:
@@ -95,9 +117,6 @@ def check_build_manifest_anika() -> None:
     data_files = build_manifest_mod.discover_anika_data_files()
     if not data_files:
         raise SystemExit("build manifest: no Anika data files discovered")
-    nuitka_args = build_manifest_mod.nuitka_data_file_arguments()
-    if not any("anika" in arg for arg in nuitka_args):
-        raise SystemExit("build manifest: Anika missing from Nuitka data arguments")
     linux_args = build_manifest_mod.linux_pyinstaller_data_arguments(os.pathsep)
     if not any("anika" in arg for arg in linux_args):
         raise SystemExit("build manifest: Anika missing from Linux PyInstaller data arguments")
@@ -128,6 +147,7 @@ def main() -> None:
     check_anika_launcher_resolution()
     check_anika_assets_subprocess()
     check_build_manifest_anika()
+    check_recorder_frame_inset()
 
     print("Smoke checks passed.")
 

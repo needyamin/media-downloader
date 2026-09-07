@@ -1,14 +1,29 @@
 import tkinter as tk
 import ctypes
-from ctypes import wintypes
 import random
 import math
 import os
 import sys
-import datetime
 import time
 
-from app.config import config_db, get_speech_bubble, get_time_aware_speech, session_memory, get_personality
+from app.config import (
+    clamp_break_interval_mins,
+    clamp_break_stay_secs,
+    config_db,
+    due_tasks_to_remind,
+    format_due_label,
+    get_clock_speech,
+    get_personality,
+    get_speech_bubble,
+    get_time_aware_speech,
+    load_tasks,
+    pending_task_count,
+    POMODORO_BREAK_SECS,
+    POMODORO_WORK_SECS,
+    save_tasks,
+    session_memory,
+    should_send_session_reminder,
+)
 from app.assets import AssetManager, BASE_SPRITE_HEIGHT
 from app.edge_hide import (
     classify_edge_hide,
@@ -64,24 +79,9 @@ def get_idle_duration():
     return 0.0
 
 
-def play_sound(sound_type):
-    """Play Windows system sound if sound is enabled."""
-    if not config_db.get("sound_enabled"):
-        return
-    try:
-        import winsound
-        if sound_type == "click":
-            return
-            
-        sounds = {
-            "spell":    winsound.MB_ICONEXCLAMATION,
-            "complete": winsound.MB_ICONASTERISK,
-            "alarm":    winsound.MB_ICONHAND,
-            "error":    winsound.MB_ICONHAND,
-        }
-        winsound.MessageBeep(sounds.get(sound_type, winsound.MB_OK))
-    except Exception:
-        pass
+def play_sound(_sound_type):
+    """Anika stays quiet — Windows system beeps are not used."""
+    return
 
 
 class DesktopPet(tk.Tk):
@@ -91,6 +91,11 @@ class DesktopPet(tk.Tk):
         # Load config & personality
         self.pet_config = config_db
         self.personality = get_personality()
+
+        from app.window_icon import apply_app_icon, install_app_icon_hook
+
+        install_app_icon_hook()
+        apply_app_icon(self)
 
         # Windows styling configuration
         self.overrideredirect(True)
@@ -189,6 +194,23 @@ class DesktopPet(tk.Tk):
         # Boredom escalation tracker
         self.boredom_level = 0        # 0=normal 1=yawn 2=sleep 3=snore
         self.session_reminder_sent = False
+        self._session_reminded_milestone = 0
+        self._break_timer_job = None
+        self._break_stay_job = None
+        self._user_timer = {
+            "remaining": POMODORO_WORK_SECS,
+            "total": POMODORO_WORK_SECS,
+            "running": False,
+            "pomodoro": True,
+            "is_break": False,
+            "label": "Focus",
+            "break_secs": POMODORO_BREAK_SECS,
+            "work_secs": POMODORO_WORK_SECS,
+            "work_label": "Focus",
+            "job": None,
+        }
+        self._timer_listeners = []
+        self._last_clock_hour = time.localtime().tm_hour
 
         # Fairy dust timer
         self.fairy_dust_timer = 0
@@ -254,6 +276,8 @@ class DesktopPet(tk.Tk):
         self._break_settings_signature = self._break_settings_tuple()
         self._start_break_timer()
         self.after(30000, self._poll_break_settings)
+        self.after(20000, self._check_task_reminders)
+        self.after(20000, self._check_hourly_clock)
 
         open_settings = os.environ.get("ANIKA_OPEN_SETTINGS", "") or os.environ.get(
             "YFUN_OPEN_SETTINGS", ""
@@ -332,28 +356,68 @@ class DesktopPet(tk.Tk):
             return lo
         return random.randint(lo, hi)
 
+    # ─── Visibility for alerts ────────────────────────────────────────
+    def _cancel_after(self, attr):
+        job = getattr(self, attr, None)
+        if not job:
+            return
+        try:
+            self.after_cancel(job)
+        except Exception:
+            pass
+        setattr(self, attr, None)
+
+    def _ensure_visible_for_alert(self, *, center=False):
+        """Bring Anika on-screen even if hidden, withdrawn, or edge-parked."""
+        self._cancel_after("_drag_hidden_timer")
+        self._edge_return_phase = None
+        self._edge_hide_side = None
+        self._visible = True
+        try:
+            self.deiconify()
+            self.wm_attributes("-topmost", True)
+            self.lift()
+        except Exception:
+            pass
+        if center:
+            wl, wt, wr, wb = get_work_area()
+            self.x = int((wl + wr) / 2 - self.width / 2)
+            self.y = int((wt + wb) / 2 - self.height / 2)
+            try:
+                self.geometry(f"+{self.x}+{self.y}")
+            except Exception:
+                pass
+
     # ─── Session Reminder ─────────────────────────────────────────────
     def _check_session_reminder(self):
         mins = session_memory.get_session_minutes()
-        if mins >= 60 and not self.session_reminder_sent:
+        if should_send_session_reminder(mins, self._session_reminded_milestone):
+            self._session_reminded_milestone = (mins // 60) * 60
             self.session_reminder_sent = True
+            self._ensure_visible_for_alert()
             lang = self.pet_config.get("language")
-            # Build personalized message with session time
-            msg = f"তুমি {mins} মিনিট ধরে কাজ করছো!\nএকটু বিরতি নাও! 🧙‍♀️"
+            pending = pending_task_count()
             if lang == "en":
-                msg = f"You've been working for {mins} minutes!\nTake a break! 🧙‍♀️"
+                msg = f"You've been working for {mins} minutes!\nTake a break!"
+                if pending:
+                    msg += f"\n{pending} task{'s' if pending != 1 else ''} still open."
+            elif lang == "bn":
+                msg = f"তুমি {mins} মিনিট ধরে কাজ করছো!\nএকটু বিরতি নাও!"
+                if pending:
+                    msg += f"\nএখনো {pending}টা কাজ বাকি।"
+            else:
+                msg = f"তুমি {mins} মিনিট ধরে কাজ করছো!\nএকটু বিরতি নাও!"
+                if pending:
+                    msg += f"\n{pending} task still open."
             self.show_speech_bubble(msg, color="#fbbf24", duration=5000)
             self.set_state("tea")
-        elif mins >= 120:
-            # Remind every hour after the first
-            self.session_reminder_sent = False
-        self.after(5 * 60000, self._check_session_reminder)  # Check every 5 minutes
+        self.after(60 * 1000, self._check_session_reminder)
 
     # ─── Break Reminder ───────────────────────────────────────────────
     def _break_settings_tuple(self):
         return (
-            int(self.pet_config.get("break_interval_mins") or 0),
-            int(self.pet_config.get("break_stay_secs") or 8),
+            clamp_break_interval_mins(self.pet_config.get("break_interval_mins")),
+            clamp_break_stay_secs(self.pet_config.get("break_stay_secs")),
         )
 
     def _poll_break_settings(self):
@@ -370,30 +434,26 @@ class DesktopPet(tk.Tk):
 
     def _start_break_timer(self):
         """Schedule the next break reminder based on the configured interval."""
-        if getattr(self, "_break_timer_job", None):
-            try:
-                self.after_cancel(self._break_timer_job)
-            except Exception:
-                pass
-            self._break_timer_job = None
-
-        self.pet_config.load()
-        interval_mins = self.pet_config.get("break_interval_mins")
+        self._cancel_after("_break_timer_job")
+        try:
+            self.pet_config.load()
+        except Exception:
+            pass
+        interval_mins = clamp_break_interval_mins(self.pet_config.get("break_interval_mins"))
         self._break_settings_signature = self._break_settings_tuple()
-        if interval_mins and interval_mins > 0:
+        if interval_mins > 0:
             self._break_timer_job = self.after(int(interval_mins * 60000), self._trigger_break_reminder)
 
     def _trigger_break_reminder(self):
         """Anika pops up in the centre of screen to announce a break."""
-        self.pet_config.load()
+        try:
+            self.pet_config.load()
+        except Exception:
+            pass
         lang = self.pet_config.get("language")
-        stay_secs = max(10, self.pet_config.get("break_stay_secs") or 8)
-
-        # Move to centre of screen so she is always visible
-        wl, wt, wr, wb = get_work_area()
-        self.x = int((wl + wr) / 2 - self.width / 2)
-        self.y = int((wt + wb) / 2 - self.height / 2)
-        self.geometry(f"+{self.x}+{self.y}")
+        stay_secs = clamp_break_stay_secs(self.pet_config.get("break_stay_secs"))
+        self._cancel_after("_break_stay_job")
+        self._ensure_visible_for_alert(center=True)
 
         self.set_state("waving")
         self.particles.add_hearts(self.width / 2, self.height / 2, count=10)
@@ -408,11 +468,252 @@ class DesktopPet(tk.Tk):
 
         self.show_speech_bubble(msg, color="#fbbf24", duration=stay_secs * 1000)
 
-        # After stay_secs, return to idle and schedule next reminder
-        self.after(stay_secs * 1000, lambda: [
-            self.set_state("idle") if self.state == "waving" else None,
+        def _finish_break_popup():
+            if self.state == "waving":
+                self.set_state("idle")
+            self._break_stay_job = None
             self._start_break_timer()
-        ])
+
+        self._break_stay_job = self.after(stay_secs * 1000, _finish_break_popup)
+
+    # ─── Task reminders ───────────────────────────────────────────────
+    def _check_task_reminders(self):
+        try:
+            tasks = load_tasks()
+            due = due_tasks_to_remind(tasks)
+            if due:
+                now_iso = time.strftime("%Y-%m-%dT%H:%M")
+                for task in due:
+                    task["reminded_at"] = now_iso
+                try:
+                    save_tasks(tasks)
+                except Exception:
+                    pass
+                self._ensure_visible_for_alert()
+                lang = self.pet_config.get("language")
+                first = due[0].get("text") or "task"
+                extra = len(due) - 1
+                if lang == "en":
+                    msg = f"Don't forget: {first}"
+                    if extra:
+                        msg += f"\n+{extra} more due."
+                elif lang == "bn":
+                    msg = f"কাজ মনে আছে? {first}"
+                    if extra:
+                        msg += f"\nআরো {extra}টা কাজের সময় হয়েছে।"
+                else:
+                    msg = get_speech_bubble("task_due", lang)
+                    msg += f"\n{first}"
+                    if extra:
+                        msg += f"\n+{extra} more."
+                due_lbl = format_due_label(due[0].get("due"))
+                if due_lbl:
+                    msg += f"\n({due_lbl})"
+                self.show_speech_bubble(msg, color="#fde68a", duration=6000)
+                self.set_state("waving")
+                play_sound("alarm")
+        except Exception:
+            pass
+        self.after(60 * 1000, self._check_task_reminders)
+
+    # ─── Hourly clock ─────────────────────────────────────────────────
+    def _check_hourly_clock(self):
+        try:
+            if self.pet_config.get("clock_announce"):
+                hour = time.localtime().tm_hour
+                if hour != self._last_clock_hour:
+                    self._last_clock_hour = hour
+                    if session_memory.get_session_minutes() >= 2:
+                        self._ensure_visible_for_alert()
+                        lang = self.pet_config.get("language")
+                        self.show_speech_bubble(get_clock_speech(lang), color="#a78bfa", duration=4000)
+                else:
+                    self._last_clock_hour = hour
+            else:
+                self._last_clock_hour = time.localtime().tm_hour
+        except Exception:
+            pass
+        self.after(20 * 1000, self._check_hourly_clock)
+
+    # ─── User timer / clock ───────────────────────────────────────────
+    def user_timer_snapshot(self):
+        timer = self._user_timer
+        return {
+            "remaining": int(timer.get("remaining") or 0),
+            "total": int(timer.get("total") or 0),
+            "running": bool(timer.get("running")),
+            "pomodoro": bool(timer.get("pomodoro")),
+            "is_break": bool(timer.get("is_break")),
+            "label": timer.get("label") or "Focus",
+            "break_secs": int(timer.get("break_secs") or POMODORO_BREAK_SECS),
+            "pomodoro_count": int(self.pet_config.get("pomodoro_count") or 0),
+        }
+
+    def add_timer_listener(self, callback):
+        if callback not in self._timer_listeners:
+            self._timer_listeners.append(callback)
+
+    def remove_timer_listener(self, callback):
+        try:
+            self._timer_listeners.remove(callback)
+        except ValueError:
+            pass
+
+    def _notify_timer_listeners(self):
+        snap = self.user_timer_snapshot()
+        stale = []
+        for callback in self._timer_listeners:
+            try:
+                callback(snap)
+            except Exception:
+                stale.append(callback)
+        for callback in stale:
+            self.remove_timer_listener(callback)
+
+    def set_user_timer_duration(self, seconds, *, pomodoro=False, is_break=False, label=None, break_secs=None):
+        seconds = max(1, int(seconds))
+        self._cancel_after_timer_job()
+        updates = {
+            "remaining": seconds,
+            "total": seconds,
+            "running": False,
+            "pomodoro": bool(pomodoro),
+            "is_break": bool(is_break),
+        }
+        if label is not None:
+            updates["label"] = label
+            if not is_break:
+                updates["work_label"] = label
+                updates["work_secs"] = seconds
+        if break_secs is not None:
+            updates["break_secs"] = max(0, int(break_secs))
+        self._user_timer.update(updates)
+        self._notify_timer_listeners()
+
+    def apply_workday_timer(self, name: str):
+        from app.config import workday_timer_preset
+
+        preset = workday_timer_preset(name)
+        self.set_user_timer_duration(
+            preset["secs"],
+            pomodoro=bool(preset["auto_break"]),
+            is_break=False,
+            label=name,
+            break_secs=preset["break_secs"],
+        )
+
+    def apply_custom_timer(self, minutes):
+        from app.config import clamp_custom_timer_mins
+
+        minutes = clamp_custom_timer_mins(minutes)
+        self.pet_config.set("last_custom_timer_mins", minutes)
+        self.set_user_timer_duration(
+            minutes * 60,
+            pomodoro=False,
+            is_break=False,
+            label=f"{minutes}m",
+            break_secs=0,
+        )
+
+    def _cancel_after_timer_job(self):
+        job = self._user_timer.get("job")
+        if job:
+            try:
+                self.after_cancel(job)
+            except Exception:
+                pass
+        self._user_timer["job"] = None
+
+    def start_user_timer(self, seconds=None, *, pomodoro=None, is_break=None):
+        if seconds is not None:
+            seconds = max(1, int(seconds))
+            self._user_timer["remaining"] = seconds
+            self._user_timer["total"] = seconds
+        if pomodoro is not None:
+            self._user_timer["pomodoro"] = bool(pomodoro)
+        if is_break is not None:
+            self._user_timer["is_break"] = bool(is_break)
+        if int(self._user_timer.get("remaining") or 0) <= 0:
+            default = int(self._user_timer.get("work_secs") or POMODORO_WORK_SECS)
+            if self._user_timer.get("is_break"):
+                default = int(self._user_timer.get("break_secs") or POMODORO_BREAK_SECS)
+            self._user_timer["remaining"] = default
+            self._user_timer["total"] = default
+        self._cancel_after_timer_job()
+        self._user_timer["running"] = True
+        self._user_timer["job"] = self.after(1000, self._tick_user_timer)
+        self._notify_timer_listeners()
+
+    def pause_user_timer(self):
+        self._cancel_after_timer_job()
+        self._user_timer["running"] = False
+        self._notify_timer_listeners()
+
+    def toggle_user_timer(self):
+        if self._user_timer.get("running"):
+            self.pause_user_timer()
+            return
+        self.start_user_timer()
+
+    def _tick_user_timer(self):
+        if not self._user_timer.get("running"):
+            self._user_timer["job"] = None
+            return
+        remaining = int(self._user_timer.get("remaining") or 0) - 1
+        self._user_timer["remaining"] = max(0, remaining)
+        if remaining > 0:
+            self._user_timer["job"] = self.after(1000, self._tick_user_timer)
+            self._notify_timer_listeners()
+            return
+        self._user_timer["running"] = False
+        self._user_timer["job"] = None
+        self._notify_timer_listeners()
+        self._fire_user_timer()
+
+    def _fire_user_timer(self):
+        play_sound("alarm")
+        self._ensure_visible_for_alert()
+        lang = self.pet_config.get("language")
+        pomodoro = bool(self._user_timer.get("pomodoro"))
+        is_break = bool(self._user_timer.get("is_break"))
+        if pomodoro and not is_break:
+            total_pomo = int(self.pet_config.get("pomodoro_count") or 0) + 1
+            self.pet_config.set("pomodoro_count", total_pomo)
+            self.particles.add_fireworks_burst(self.width / 2, self.height / 2, count=20)
+            self.show_speech_bubble(get_speech_bubble("pomodoro_done", lang), color="#fde68a", duration=5000)
+            self.after(5000, lambda: self.show_speech_bubble(
+                get_speech_bubble("break_suggestion", lang), color="#bbf7d0", duration=5000
+            ))
+            break_secs = int(self._user_timer.get("break_secs") or POMODORO_BREAK_SECS)
+            self._user_timer["label"] = "Break"
+            self.start_user_timer(break_secs, pomodoro=True, is_break=True)
+            return
+        if pomodoro and is_break:
+            work_secs = int(self._user_timer.get("work_secs") or POMODORO_WORK_SECS)
+            work_label = self._user_timer.get("work_label") or "Focus"
+            self.set_user_timer_duration(
+                work_secs,
+                pomodoro=True,
+                is_break=False,
+                label=work_label,
+                break_secs=int(self._user_timer.get("break_secs") or POMODORO_BREAK_SECS),
+            )
+            self.show_speech_bubble(get_speech_bubble("alarm", lang), color="#fde68a", duration=5000)
+            self._show_timer_popup(break_over=True)
+            return
+        self.set_state("waving")
+        self.particles.add_sparks(self.width / 2, self.height / 2, count=30)
+        label = self._user_timer.get("label") or ""
+        self.show_speech_bubble(get_speech_bubble("alarm", lang), color="#fde68a", duration=5000)
+        self._show_timer_popup(break_over=False, label=label)
+
+    def _show_timer_popup(self, *, break_over=False, label=""):
+        try:
+            from app.gui import show_timer_alert
+
+            show_timer_alert(self, break_over=break_over, label=label)
+        except Exception:
+            pass
 
     # ─── Drag & Drop ─────────────────────────────────────────────────
     def _edge_hide_delay_ms(self) -> int:
@@ -1694,6 +1995,9 @@ class DesktopPet(tk.Tk):
 
     def quit_app(self):
         session_memory.save()
+        self._cancel_after("_break_timer_job")
+        self._cancel_after("_break_stay_job")
+        self._cancel_after_timer_job()
         self.clear_speech_bubble()
         self.particles.clear()
         try:

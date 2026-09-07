@@ -105,7 +105,55 @@ def get_user_data_dir(app_name: str = "Media Downloader") -> Path:
     return target_dir
 
 
-def apply_window_icon(window, app_id: str = "needyamin.media_downloader") -> Path:
+_ICON_PHOTO = None
+_ICON_HOOK_INSTALLED = False
+DEFAULT_APP_ID = "needyamin.media_downloader"
+
+
+def _icon_photo(icon_path: Path):
+    """Keep one PhotoImage alive so Tk does not drop the window icon."""
+    global _ICON_PHOTO
+    if _ICON_PHOTO is not None:
+        return _ICON_PHOTO
+    if Image is None or ImageTk is None or not icon_path.exists():
+        return None
+    try:
+        _ICON_PHOTO = ImageTk.PhotoImage(Image.open(icon_path))
+    except Exception:
+        return None
+    return _ICON_PHOTO
+
+
+def _window_exists(window) -> bool:
+    if window is None:
+        return False
+    try:
+        return bool(window.winfo_exists())
+    except Exception:
+        return False
+
+
+def _apply_icon_now(window, icon_path: Path) -> None:
+    if not _window_exists(window) or not icon_path.exists():
+        return
+    try:
+        photo = _icon_photo(icon_path)
+        if photo is not None:
+            window.iconphoto(True, photo)
+            window._shared_icon_photo = photo
+    except Exception:
+        pass
+    if sys.platform.startswith("win"):
+        try:
+            window.iconbitmap(default=str(icon_path))
+        except Exception:
+            try:
+                window.iconbitmap(str(icon_path))
+            except Exception:
+                pass
+
+
+def apply_window_icon(window, app_id: str = DEFAULT_APP_ID) -> Path:
     """Apply the shared app icon to a Tk window and its Windows taskbar identity."""
     icon_path = get_asset_path("needyamin.ico")
 
@@ -115,18 +163,51 @@ def apply_window_icon(window, app_id: str = "needyamin.media_downloader") -> Pat
     except Exception:
         pass
 
-    if icon_path.exists():
+    if window is not None:
+        _apply_icon_now(window, icon_path)
+        # CTk / Windows often reset the icon after the window is mapped.
         try:
-            if Image is not None and ImageTk is not None:
-                icon_image = ImageTk.PhotoImage(Image.open(icon_path))
-                window.iconphoto(True, icon_image)
-                window._shared_icon_photo = icon_image
-            if sys.platform.startswith("win"):
-                window.iconbitmap(str(icon_path))
+            window.after_idle(lambda w=window, path=icon_path: _apply_icon_now(w, path))
+            window.after(250, lambda w=window, path=icon_path: _apply_icon_now(w, path))
         except Exception:
             pass
 
+    install_window_icon_hook()
     return icon_path
+
+
+def install_window_icon_hook() -> None:
+    """Make every new Tk / CustomTkinter toplevel use the app icon."""
+    global _ICON_HOOK_INSTALLED
+    if _ICON_HOOK_INSTALLED:
+        return
+    _ICON_HOOK_INSTALLED = True
+
+    try:
+        import tkinter as tk
+
+        original = tk.Toplevel.__init__
+
+        def _toplevel_init(self, *args, **kwargs):
+            original(self, *args, **kwargs)
+            apply_window_icon(self)
+
+        tk.Toplevel.__init__ = _toplevel_init
+    except Exception:
+        pass
+
+    try:
+        import customtkinter as ctk
+
+        original_ctk = ctk.CTkToplevel.__init__
+
+        def _ctk_init(self, *args, **kwargs):
+            original_ctk(self, *args, **kwargs)
+            apply_window_icon(self)
+
+        ctk.CTkToplevel.__init__ = _ctk_init
+    except Exception:
+        pass
 
 
 def center_window(window, parent=None) -> None:

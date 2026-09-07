@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Privacy policy for the Media Downloader desktop app.">
+  <title>Privacy Policy — Media Downloader</title>
+  <link rel="icon" href="https://download.ansnew.com/favicon.ico" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --gray-50: #f8f9fb; --gray-200: #e2e5e9; --gray-500: #6b7280; --gray-700: #374151;
+      --gray-900: #111827; --blue-600: #2563eb; --blue-700: #1d4ed8;
+    }
+    body { font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.65; color: var(--gray-700); }
+    a { color: var(--blue-600); text-decoration: none; }
+    a:hover { color: var(--blue-700); }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 32px 24px 64px; }
+    h1 { font-size: 1.8rem; color: var(--gray-900); margin: 8px 0 8px; }
+    h2 { font-size: 1.1rem; color: var(--gray-900); margin: 28px 0 8px; }
+    p, li { margin-bottom: 10px; }
+    ul { padding-left: 20px; }
+    .meta { color: var(--gray-500); font-size: .9rem; margin-bottom: 24px; }
+    nav { padding: 16px 0 8px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav><a href="index.html">← Media Downloader</a></nav>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Last updated: 8 September 2026 · Publisher: Md Yamin Hossain / ANSNEW TECH</p>
+
+    <p>Media Downloader is a desktop app. It does not require an account and does not show ads. This page describes what the Windows and Linux apps do with data on your computer.</p>
+
+    <h2>What stays on your PC</h2>
+    <ul>
+      <li>Downloads, converted files, screenshots, recordings, and background-removed images are saved in folders you choose (or the default download folder).</li>
+      <li>Settings are stored locally, usually under <code>%LOCALAPPDATA%\Media Downloader\</code> on Windows.</li>
+      <li>Optional tools such as FFmpeg or background-remover models are downloaded to that local folder only when missing, after a warning.</li>
+    </ul>
+
+    <h2>What leaves your PC</h2>
+    <ul>
+      <li><strong>Downloads you start.</strong> When you paste a URL, the app contacts that site (or its CDN) to fetch the file. We do not operate those sites.</li>
+      <li><strong>Update checks.</strong> The packaged Windows app may contact GitHub Releases to see if a newer installer exists.</li>
+      <li><strong>Optional dependency downloads.</strong> FFmpeg or AI model files may be fetched from their public project hosts when you confirm they are missing.</li>
+    </ul>
+    <p>The app does not create a user profile on our servers. There is no sign-in and no analytics account.</p>
+
+    <h2>Clipboard, screen, and hotkeys</h2>
+    <p>If you use clipboard URL detection, screenshot, or screen recording, those features read only what you ask them to capture. Recordings and images stay on your device unless you share them yourself. Global hotkeys work only while the app is running.</p>
+
+    <h2>Children</h2>
+    <p>The app is a general productivity tool. It is not directed at children under 13 and does not knowingly collect personal information from children.</p>
+
+    <h2>Your choices</h2>
+    <ul>
+      <li>Do not start a download if you do not want the app to contact that URL.</li>
+      <li>Turn off optional tools you do not use.</li>
+      <li>Uninstall the app to remove the program files. You can also delete the local settings folder.</li>
+    </ul>
+
+    <h2>Contact</h2>
+    <p>Questions: <a href="https://github.com/needyamin/media-downloader/issues">GitHub issues</a> or the publisher listed on the <a href="index.html">product page</a>.</p>
+  </div>
+</body>
+</html>

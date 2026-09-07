@@ -69,6 +69,16 @@ class TrayIcon:
                 if pet:
                     pet.after(0, pet.open_settings)
 
+            def on_tasks(icon, item):
+                pet = self._get_pet()
+                if pet:
+                    pet.after(0, pet.open_spellbook)
+
+            def on_timer(icon, item):
+                pet = self._get_pet()
+                if pet:
+                    pet.after(0, pet.open_timer)
+
             def on_quit(icon, item):
                 pet = self._get_pet()
                 if pet:
@@ -87,12 +97,14 @@ class TrayIcon:
                         self._visible = True
 
             menu = pystray.Menu(
-                pystray.MenuItem("🧙‍♀️ Show Anika", on_show, default=True),
-                pystray.MenuItem("🙈 Hide Anika", on_hide),
+                pystray.MenuItem("Show Anika", on_show, default=True),
+                pystray.MenuItem("Hide Anika", on_hide),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("⚙️ Settings", on_settings),
+                pystray.MenuItem("Today", on_tasks),
+                pystray.MenuItem("Workday", on_timer),
+                pystray.MenuItem("Settings", on_settings),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem("👋 Quit", on_quit),
+                pystray.MenuItem("Quit", on_quit),
             )
 
             img = _make_tray_icon_image()

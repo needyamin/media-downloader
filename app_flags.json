@@ -13,16 +13,16 @@
     "background_remover": "Ctrl+Shift+B",
     "screenshot": "Ctrl+Shift+Y",
     "screen_recorder": "Ctrl+Shift+R",
-    "anika": "Ctrl+Shift+U",
+    "anika": "Ctrl+Shift+A",
     "record_pause": "Ctrl+Shift+P",
     "record_finish": "Ctrl+Shift+S"
   },
   "versions": {
-    "media_downloader": "2.0.0",
+    "media_downloader": "3.0.0",
     "background_remover": "1.0.0"
   },
   "paths": {
-    "download_root_dirname": "Yamin Downloader",
+    "download_root_dirname": "AnsNewTech Downloads",
     "screen_recorder_output_dirname": "YScreenRecorder"
   },
   "ui": {

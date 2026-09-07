@@ -7,9 +7,9 @@ __pycache__/
 *.pyd
 *.dll
 
-# Local HTML drafts (keep index.html — project landing page)
+# Local HTML drafts (keep the public privacy page)
 *.html
-!index.html
+!privacy.html
 
 # Virtual environments and local env files
 .venv/
@@ -79,9 +79,17 @@ release/**/appimagetool-*.AppImage
 *.onefile-build/
 *.spec
 
+# Local test code-signing material (never commit)
+certs/
+*.pfx
+*.p12
+
 # Packaged installers and bundles (local outputs)
 *.exe
 *.msi
+*.msix
+*.appx
+*.appxbundle
 *.AppImage
 *.deb
 *.rpm
@@ -90,7 +98,6 @@ release/**/appimagetool-*.AppImage
 # -----------------------------------------------------------------------------
 # Build diagnostics and temp / runtime files
 # -----------------------------------------------------------------------------
-nuitka-crash-report*.xml
 *.tmp
 *.bak
 *.part

@@ -4,31 +4,31 @@ from __future__ import annotations
 
 # (action_key, label)
 PET_TOOL_ACTIONS: list[tuple[str, str]] = [
-    ("spellbook", "🧙‍♀️ Spell Book (To-Do List)"),
-    ("timer", "☕ Chaa Break (Timer)"),
-    ("magic_clean", "🧹 Magic RAM Clean"),
+    ("spellbook", "Today"),
+    ("timer", "Workday"),
+    ("magic_clean", "Free memory"),
 ]
 
 PET_FORCE_ACTIONS: list[tuple[str, str]] = [
-    ("action", "🪄 Cast a Spell"),
-    ("sleeping", "💤 Go to Sleep"),
-    ("dance", "💃 Cute Dance"),
-    ("waving", "👋 Wave Hello"),
-    ("crying", "😭 Cry"),
-    ("eating", "🥪 Eat Sandwich"),
-    ("study", "📖 Study Spells"),
-    ("tea", "🍵 Sip Chaa (Tea)"),
-    ("broom", "🧹 Broom Flight"),
-    ("blush", "😊 Shy Blush"),
-    ("laugh", "😂 Happy Laugh"),
-    ("shocked", "😲 Feel Shocked"),
-    ("peek", "👀 Peek From Edge"),
-    ("focus", "🔍 Come into Focus"),
-    ("chase", "🏃‍♀️ Chase Mouse"),
-    ("hide", "🫣 Hide & Seek"),
+    ("action", "Cast a spell"),
+    ("sleeping", "Sleep"),
+    ("dance", "Dance"),
+    ("waving", "Wave"),
+    ("crying", "Cry"),
+    ("eating", "Eat"),
+    ("study", "Study"),
+    ("tea", "Drink tea"),
+    ("broom", "Broom flight"),
+    ("blush", "Blush"),
+    ("laugh", "Laugh"),
+    ("shocked", "Shocked"),
+    ("peek", "Peek"),
+    ("focus", "Focus"),
+    ("chase", "Chase mouse"),
+    ("hide", "Hide"),
 ]
 
-PET_QUIT_ACTION: tuple[str, str] = ("quit", "👋 Goodbye Anika")
+PET_QUIT_ACTION: tuple[str, str] = ("quit", "Quit Anika")
 
 
 def run_pet_menu_action(pet, action_key: str) -> None:
@@ -56,7 +56,7 @@ def populate_tk_context_menu(menu, pet) -> None:
         menu.add_command(label=label, command=lambda k=_key: run_pet_menu_action(pet, k))
 
     menu.add_separator()
-    menu.add_command(label="⚙️ Assistant Settings", command=pet.open_settings)
+    menu.add_command(label="Settings", command=pet.open_settings)
 
     actions_menu = tk.Menu(menu, tearoff=0)
     for _key, label in PET_FORCE_ACTIONS:
@@ -64,7 +64,7 @@ def populate_tk_context_menu(menu, pet) -> None:
             label=label,
             command=lambda k=_key: run_pet_menu_action(pet, k),
         )
-    menu.add_cascade(label="🎭 Force Action", menu=actions_menu)
+    menu.add_cascade(label="Action", menu=actions_menu)
 
     menu.add_separator()
     _quit_key, quit_label = PET_QUIT_ACTION

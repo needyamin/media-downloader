@@ -1,5 +1,5 @@
 #define MyAppName "Media Downloader"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "3.0.0"
 #define MyAppPublisher "Md Yamin Hossain"
 #define MyAppURL "https://github.com/needyamin/media-downloader"
 #ifndef MyAppExeName

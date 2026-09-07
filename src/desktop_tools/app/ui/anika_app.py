@@ -213,7 +213,14 @@ def open_anika(parent=None) -> str:
     env = os.environ.copy()
     capture_output = len(command) > 1
     if capture_output:
-        env["PYTHONPATH"] = str(anika_dir)
+        path_parts = [str(anika_dir)]
+        src_dir = anika_dir.parents[1]
+        if (src_dir / "desktop_tools").is_dir():
+            path_parts.append(str(src_dir))
+        existing = env.get("PYTHONPATH", "")
+        if existing:
+            path_parts.append(existing)
+        env["PYTHONPATH"] = os.pathsep.join(path_parts)
     env.setdefault("ANIKA_NO_TRAY", "1")
 
     cwd = str(anika_dir)

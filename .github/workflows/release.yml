@@ -1,13 +1,13 @@
 # Build protected binaries and publish a GitHub Release when you push a version tag.
 #
 # Usage:
-#   git tag v2.0.1
-#   git push origin v2.0.1
+#   git tag v3.0.0
+#   git push origin v3.0.0
 #
 # Installed apps check https://github.com/needyamin/media-downloader/releases/latest
 # and download MediaDownloader_Setup.exe (Windows) or the AppImage (Linux).
 
-name: Release (Nuitka + AppImage)
+name: Release (PyInstaller + AppImage)
 
 on:
   push:
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. 2.0.1) — required for manual runs"
+        description: "Release version (e.g. 3.0.0) — required for manual runs"
         required: true
         type: string
 
@@ -28,8 +28,8 @@ env:
   PYTHONPATH: src
 
 jobs:
-  windows-nuitka:
-    name: Windows (Nuitka + Inno Setup)
+  windows-installer:
+    name: Windows (PyInstaller + Inno Setup)
     runs-on: windows-latest
     env:
       MD_RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
@@ -51,18 +51,18 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install nuitka ordered-set zstandard
+          python -m pip install pyinstaller
           python -m pip install -r src/desktop_tools/app/requirements.txt
 
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
 
-      - name: Build Windows installer (Nuitka — no source in output)
+      - name: Build Windows installer (PyInstaller onedir — no source in output)
         shell: pwsh
         env:
           MD_RELEASE_VERSION: ${{ env.MD_RELEASE_VERSION }}
-        run: python -m desktop_tools.app.build_tools.nuitka
+        run: python -m desktop_tools.app.build_tools.pyinstaller
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
@@ -120,7 +120,7 @@ jobs:
 
   github-release:
     name: Publish GitHub Release
-    needs: [windows-nuitka, linux-appimage]
+    needs: [windows-installer, linux-appimage]
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}

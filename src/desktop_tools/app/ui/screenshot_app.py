@@ -22,9 +22,10 @@ try:
 except Exception:
     from app_windowing import cleanup_hidden_root, create_hidden_root, ensure_src_on_path
 
-SRC_DIR = ensure_src_on_path(__file__)
+ensure_src_on_path(__file__)
 
 from desktop_tools.shared.capture_support import capture_desktop_snapshot, copy_image_to_linux_clipboard
+from desktop_tools.shared.resources import apply_window_icon
 from desktop_tools.app.config.runtime_flags import SCREENSHOT_DIM_ALPHA, get_tool_theme
 
 TOOL_SPECS = {
@@ -83,6 +84,7 @@ class ScreenshotOverlay(tk.Toplevel):
         parent, self._standalone_root = create_hidden_root(parent)
 
         super().__init__(parent)
+        apply_window_icon(self, app_id="needyamin.media_downloader")
         self.parent_window = parent if isinstance(parent, (tk.Tk, tk.Toplevel)) else None
 
         self.base_image, self.virtual_x, self.virtual_y, self.screen_width, self.screen_height = self._capture_screen()

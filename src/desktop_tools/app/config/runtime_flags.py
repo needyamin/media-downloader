@@ -25,16 +25,16 @@ DEFAULT_APP_FLAGS = {
         "background_remover": "Ctrl+Shift+B",
         "screenshot": "Ctrl+Shift+Y",
         "screen_recorder": "Ctrl+Shift+R",
-        "anika": "Ctrl+Shift+U",
+        "anika": "Ctrl+Shift+A",
         "record_pause": "Ctrl+Shift+P",
         "record_finish": "Ctrl+Shift+S",
     },
     "versions": {
-        "media_downloader": "2.0.0",
+        "media_downloader": "3.0.0",
         "background_remover": "1.0.0",
     },
     "paths": {
-        "download_root_dirname": "Yamin Downloader",
+        "download_root_dirname": "AnsNewTech Downloads",
         "screen_recorder_output_dirname": "YScreenRecorder",
     },
     "ui": {
@@ -180,13 +180,13 @@ HOTKEY_SCREENRECORDER = get_hotkey_combo(APP_FLAGS, "screen_recorder", "Ctrl+Shi
 HOTKEY_ANIKA = get_hotkey_combo(
     APP_FLAGS,
     "anika",
-    get_hotkey_combo(APP_FLAGS, "yfun", "Ctrl+Shift+U"),
+    get_hotkey_combo(APP_FLAGS, "yfun", "Ctrl+Shift+A"),
 )
 HOTKEY_RECORD_PAUSE = get_hotkey_combo(APP_FLAGS, "record_pause", "Ctrl+Shift+P")
 HOTKEY_RECORD_FINISH = get_hotkey_combo(APP_FLAGS, "record_finish", "Ctrl+Shift+S")
-APP_VERSION_MAIN = get_version_setting("media_downloader", "2.0.0")
+APP_VERSION_MAIN = get_version_setting("media_downloader", "3.0.0")
 APP_VERSION_BG_REMOVER = get_version_setting("background_remover", "1.0.0")
-DOWNLOAD_ROOT_DIRNAME = get_path_setting("download_root_dirname", "Yamin Downloader")
+DOWNLOAD_ROOT_DIRNAME = get_path_setting("download_root_dirname", "AnsNewTech Downloads")
 SCREEN_RECORDER_OUTPUT_DIRNAME = get_path_setting("screen_recorder_output_dirname", "YScreenRecorder")
 SCREENSHOT_DIM_ALPHA = float(get_ui_setting("screenshot_dim_alpha", 0.42))
 

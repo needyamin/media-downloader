@@ -22,6 +22,12 @@ def create_hidden_root(parent: tk.Tk | tk.Toplevel | None) -> tuple[tk.Tk | tk.T
         return parent, None
     standalone_root = tk.Tk()
     standalone_root.withdraw()
+    try:
+        from desktop_tools.shared.resources import apply_window_icon
+
+        apply_window_icon(standalone_root)
+    except Exception:
+        pass
     return standalone_root, standalone_root
 
 
