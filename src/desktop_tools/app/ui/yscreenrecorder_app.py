@@ -246,6 +246,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
         parent, self._standalone_root = create_hidden_root(parent)
 
         super().__init__(parent)
+        self._skip_auto_center = True
         self.parent_window = parent if isinstance(parent, (tk.Tk, tk.Toplevel)) else None
 
         self.base_image, self.virtual_x, self.virtual_y, self.screen_width, self.screen_height = self._capture_screen()
@@ -842,6 +843,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
             return hud
 
         hud = tk.Toplevel(self)
+        hud._skip_auto_center = True
         hud.withdraw()
         hud.overrideredirect(True)
         hud.title("YScreenRecorder")
@@ -948,6 +950,7 @@ class YScreenRecorderOverlay(tk.Toplevel):
                 continue
             host = self._standalone_root if self._standalone_root is not None else self
             bar = tk.Toplevel(host)
+            bar._skip_auto_center = True
             bar.withdraw()
             bar.overrideredirect(True)
             bar.configure(bg=color)

@@ -158,6 +158,8 @@ def check_window_icon() -> None:
     gui_src = (ANIKA_DIR / "app" / "gui.py").read_text(encoding="utf-8")
     if "apply_app_icon" not in gui_src or "install_app_icon_hook" not in gui_src:
         raise SystemExit("Anika GUI windows are not applying the app icon")
+    if "center_app_window" not in gui_src:
+        raise SystemExit("Anika GUI windows are not centered on screen")
     pet_src = (ANIKA_DIR / "app" / "pet.py").read_text(encoding="utf-8")
     if "apply_app_icon" not in pet_src:
         raise SystemExit("Anika main window is not applying the app icon")

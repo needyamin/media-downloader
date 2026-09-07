@@ -21,6 +21,7 @@ def create_hidden_root(parent: tk.Tk | tk.Toplevel | None) -> tuple[tk.Tk | tk.T
     if parent is not None:
         return parent, None
     standalone_root = tk.Tk()
+    standalone_root._skip_auto_center = True
     standalone_root.withdraw()
     try:
         from desktop_tools.shared.resources import apply_window_icon

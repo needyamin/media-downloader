@@ -87,6 +87,7 @@ def play_sound(_sound_type):
 class DesktopPet(tk.Tk):
     def __init__(self):
         super().__init__()
+        self._skip_auto_center = True
 
         # Load config & personality
         self.pet_config = config_db

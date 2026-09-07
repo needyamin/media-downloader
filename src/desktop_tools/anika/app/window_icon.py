@@ -88,6 +88,29 @@ def apply_app_icon(window) -> Path:
     return icon_path
 
 
+def center_app_window(window) -> None:
+    """Center an Anika window in the middle of the screen."""
+    _ensure_src_on_path()
+    try:
+        from desktop_tools.shared.resources import center_window
+
+        center_window(window)
+        return
+    except Exception:
+        pass
+    try:
+        window.update_idletasks()
+        width = window.winfo_width() or window.winfo_reqwidth()
+        height = window.winfo_height() or window.winfo_reqheight()
+        screen_width = window.winfo_screenwidth()
+        screen_height = window.winfo_screenheight()
+        x = max(0, (screen_width - width) // 2)
+        y = max(0, (screen_height - height) // 2)
+        window.geometry(f"{width}x{height}+{x}+{y}")
+    except Exception:
+        pass
+
+
 def _reapply(window, icon_path: Path) -> None:
     try:
         if not window.winfo_exists() or not icon_path.is_file():
@@ -118,6 +141,10 @@ def install_app_icon_hook() -> None:
         def _init(self, *args, **kwargs):
             original(self, *args, **kwargs)
             apply_app_icon(self)
+            try:
+                self.after_idle(lambda w=self: center_app_window(w))
+            except Exception:
+                pass
 
         tk.Toplevel.__init__ = _init
     except Exception:
@@ -130,6 +157,10 @@ def install_app_icon_hook() -> None:
         def _ctk_init(self, *args, **kwargs):
             original_ctk(self, *args, **kwargs)
             apply_app_icon(self)
+            try:
+                self.after_idle(lambda w=self: center_app_window(w))
+            except Exception:
+                pass
 
         ctk.CTkToplevel.__init__ = _ctk_init
     except Exception:

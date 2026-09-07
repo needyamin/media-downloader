@@ -84,6 +84,7 @@ class ScreenshotOverlay(tk.Toplevel):
         parent, self._standalone_root = create_hidden_root(parent)
 
         super().__init__(parent)
+        self._skip_auto_center = True
         apply_window_icon(self, app_id="needyamin.media_downloader")
         self.parent_window = parent if isinstance(parent, (tk.Tk, tk.Toplevel)) else None
 

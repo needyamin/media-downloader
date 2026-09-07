@@ -1383,7 +1383,7 @@ def debug_update_check():
 # Create main window
 root = tk.Tk()
 root.title("Media Downloader")
-root.geometry("880x1020")
+root.geometry("880x840")
 root.minsize(760, 740)
 root.configure(bg=THEME['bg'])
 

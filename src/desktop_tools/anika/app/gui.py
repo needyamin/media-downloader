@@ -36,7 +36,7 @@ from app.config import (
     clock_display_parts,
 )
 from app.ui_theme import apply_ctk_appearance, enrich_theme
-from app.window_icon import apply_app_icon, install_app_icon_hook
+from app.window_icon import apply_app_icon, center_app_window, install_app_icon_hook
 
 apply_ctk_appearance()
 install_app_icon_hook()
@@ -76,6 +76,7 @@ def _bring_to_front(win_key):
     if win is not None:
         try:
             if win.winfo_exists():
+                center_app_window(win)
                 win.lift()
                 win.focus()
                 return True
@@ -87,6 +88,10 @@ def _bring_to_front(win_key):
 
 def _track_window(win_key, win, on_close=None):
     apply_app_icon(win)
+    try:
+        win.after_idle(lambda w=win: center_app_window(w))
+    except Exception:
+        pass
     _active_windows[win_key] = win
 
     def _close():
@@ -1033,6 +1038,10 @@ def _show_alert(win, pet, theme, accent, accent_hover, break_over=False, label="
     alert.resizable(False, False)
     alert.attributes("-topmost", True)
     alert.configure(fg_color=theme["bg"])
+    try:
+        alert.after_idle(lambda w=alert: center_app_window(w))
+    except Exception:
+        pass
 
     if break_over:
         message = "Break is over. Ready for the next block."
